@@ -3084,6 +3084,21 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
               copyToClipboard(subUrl);
           }
 
+          
+          function copySub(idOrName) {
+              const currentBase = window.location.pathname.split('/dash')[0] || '/sync';
+              const subUrl = window.location.origin + currentBase + '?sub=' + encodeURIComponent(idOrName);
+              if (navigator.clipboard && navigator.clipboard.writeText) {
+                  navigator.clipboard.writeText(subUrl).then(() => {
+                      showToast(lang === 'fa' ? 'لینک اشتراک کپی شد!' : 'Subscription link copied!', 'success');
+                  }).catch(() => {
+                      prompt(lang === 'fa' ? 'لینک اشتراک:' : 'Subscription link:', subUrl);
+                  });
+              } else {
+                  prompt(lang === 'fa' ? 'لینک اشتراک:' : 'Subscription link:', subUrl);
+              }
+          }
+
           function copyToClipboard(text) {
               navigator.clipboard.writeText(text).then(() => {
                   showToast(lang === 'fa' ? 'کپی شد!' : 'Copied!', 'success');

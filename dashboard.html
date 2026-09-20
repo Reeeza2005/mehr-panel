@@ -2993,9 +2993,7 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
             }
         }
 
-                  }
-
-          async function loadDashboard() {
+                  async function loadDashboard() {
               
             try {
                 const [statsRes, logsRes] = await Promise.all([
@@ -5049,9 +5047,7 @@ function buildModeCheckboxes(wrapId, userMode) {
           }
 
           async function showUpdateBanner(repo, version) {
-              const isUpToDate = (version === CURRENT_VERSION && !window._updateData?.updateAvailable);
               const banner = document.getElementById('update-alert-banner');
-              if (!banner) return;
               let msg = '';
               if (isUpToDate) {
                   msg = lang === 'fa' ? 'پنل شما بروز است (نسخه فعلی: v' + CURRENT_VERSION + ').' : 'Your panel is up to date (v' + CURRENT_VERSION + ').';
@@ -5063,6 +5059,7 @@ function buildModeCheckboxes(wrapId, userMode) {
               if (ghLink) ghLink.href = 'https://github.com/' + repo;
               banner.classList.remove('hidden');
               banner.classList.add('flex');
+
               const changelogArea = document.getElementById('update-changelog-area');
               const changelogContent = document.getElementById('update-changelog-content');
               if (changelogArea && changelogContent) {
@@ -5077,83 +5074,16 @@ function buildModeCheckboxes(wrapId, userMode) {
                           const res = await fetch('https://api.github.com/repos/' + repo + '/releases/tags/v' + version);
                           if (res.ok) {
                               const rel = await res.json();
-                              if (rel && rel.body) {
-                                  changelogText = rel.body;
-                              }
-                          } else {
-                              const resNoV = await fetch('https://api.github.com/repos/' + repo + '/releases/tags/' + version);
-                              if (resNoV.ok) {
-                                  const relNoV = await resNoV.json();
-                                  if (relNoV && relNoV.body) {
-                                      changelogText = relNoV.body;
-                                  }
-                              }
+                              changelogText = rel.body || '';
                           }
                       } catch(e) {}
-
-                      if (!changelogText) {
-                          try {
-                              const resLatest = await fetch('https://api.github.com/repos/' + repo + '/releases/latest');
-                              if (resLatest.ok) {
-                                  const relLatest = await resLatest.json();
-                                  if (relLatest && relLatest.body) {
-                                      changelogText = relLatest.body;
-                                  }
-                              }
-                          } catch(e) {}
-                      }
-
-                      if (!changelogText) {
-                          try {
-                              const resFile = await fetch('https://raw.githubusercontent.com/' + repo + '/main/CHANGELOG.md');
-                              if (resFile.ok) {
-                                  changelogText = await resFile.text();
-                              }
-                          } catch(e) {}
-                      }
 
                       if (changelogText) {
                           changelogContent.innerHTML = parseMarkdown(changelogText);
                       } else {
                           changelogContent.innerHTML = lang === 'fa'
-                              ? '<div class="space-y-2">' +
-                                '<p class="font-bold">✨ اضافه شده:</p>' +
-                                '<ul class="list-disc list-inside text-xs space-y-1">' +
-                                '<li>صفحه اشتراک چندزبانه با حالت تاریک/روشن</li>' +
-                                '<li>پشتیبانی NAT64 و نودهای اختصاصی کاربر</li>' +
-                                '<li>کانفیگ‌های مستقیم و بروزرسانی خودکار</li>' +
-                                '<li>مدیریت کامل دروازه از ربات تلگرام</li>' +
-                                '</ul>' +
-                                '<p class="font-bold mt-2">⚡ بهبود یافته:</p>' +
-                                '<ul class="list-disc list-inside text-xs space-y-1">' +
-                                '<li>عملکرد داشبورد و سرعت اسکرول</li>' +
-                                '<li>بازنویسی کامل تولید کانفیگ‌ها</li>' +
-                                '<li>نام‌گذاری هوشمند با تگ‌های جدید</li>' +
-                                '</ul>' +
-                                '<p class="font-bold mt-2">🔧 رفع شده:</p>' +
-                                '<ul class="list-disc list-inside text-xs space-y-1">' +
-                                '<li>ترجمه‌های فارسی معیوب</li>' +
-                                '<li>خطای صفحه اشتراک</li>' +
-                                '</ul></div>'
-                              : '<div class="space-y-2">' +
-                                '<p class="font-bold">✨ Added:</p>' +
-                                '<ul class="list-disc list-inside text-xs space-y-1">' +
-                                '<li>Bilingual subscription page with dark/light mode</li>' +
-                                '<li>NAT64 support and per-user custom nodes</li>' +
-                                '<li>Direct configs and auto update</li>' +
-                                '<li>Full gateway management via Telegram bot</li>' +
-                                '</ul>' +
-                                '<p class="font-bold mt-2">⚡ Improved:</p>' +
-                                '<ul class="list-disc list-inside text-xs space-y-1">' +
-                                '<li>Dashboard performance and scroll speed</li>' +
-                                '<li>Complete rewrite of all config generators</li>' +
-                                '<li>Smart config naming with new tags</li>' +
-                                '</ul>' +
-                                '<p class="font-bold mt-2">🔧 Fixed:</p>' +
-                                '<ul class="list-disc list-inside text-xs space-y-1">' +
-                                '<li>Garbled Persian translations</li>' +
-                                '<li>Subscription page display error</li>' +
-                                '</ul></div>';
+                              ? '<div><p class="font-bold text-amber-600 dark:text-amber-400 mb-2">✨ ویژگی‌ها و تغییرات پنل مهر (v' + version + '):</p><ul class="list-disc list-inside text-xs space-y-1"><li>مسیریابی هوشمند سابسکریپشن بر اساس نام کاربری</li><li>نمایش کارت وب و مشخصات حجم و تاریخ انقضا</li><li>بهبود پایداری رندر داشبورد و اتصال کلاینت‌ها</li></ul></div>'
+                              : '<div><p class="font-bold text-amber-600 dark:text-amber-400 mb-2">✨ Mehr Panel Updates (v' + version + '):</p><ul class="list-disc list-inside text-xs space-y-1"><li>Smart username subscription routing</li><li>Responsive HTML profile card for subscribers</li><li>Enhanced dashboard initialization and client stability</li></ul></div>';
                       }
                   } catch(err) {
                       changelogContent.innerHTML = lang === 'fa'
@@ -5162,6 +5092,7 @@ function buildModeCheckboxes(wrapId, userMode) {
                   }
               }
           }
+
           //DateTime Function
             const _dtFormatter = new Intl.DateTimeFormat('fa-IR', {
         year: 'numeric',

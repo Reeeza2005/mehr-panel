@@ -1,7 +1,7 @@
 import { connect } from "cloudflare:sockets";
 import HTML_CONTENT from "./dashboard.html";
 
-const CURRENT_VERSION = "3.0.2";
+const CURRENT_VERSION = "3.0.3";
 
 const SYSTEM_DEFAULTS = {
     githubRepo: 'Reeeza2005/mehr-panel',

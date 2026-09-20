@@ -45,7 +45,7 @@ async function loadConfig(env) {
         if (!env.IOT_DB) return;
         const confStr = await d1Get(env, "sys_config");
         if (confStr) {
-            sysConfig = { ...SYSTEM_DEFAULTS, ...JSON.parse(confStr), name: "مِهر" };
+            sysConfig = { ...SYSTEM_DEFAULTS, ...JSON.parse(confStr), name: "مِهر", githubRepo: "Reeeza2005/mehr-panel" };
         }
     } catch (e) {}
 }

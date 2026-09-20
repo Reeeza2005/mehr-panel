@@ -3884,12 +3884,21 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                   let deleteTitle = lang === 'fa' ? 'حذف کاربر' : 'Delete User';
                   let copyUuidTitle = lang === 'fa' ? 'کپی شناسه' : 'Copy UUID';
 
-                   let linkHtml = `<button onclick="copyData('sync-${u.id}')" class="native-press flex-1 flex flex-col items-center justify-center gap-0.5 text-primary hover:text-primary bg-primary/5 hover:bg-primary/15 dark:bg-primary/10 dark:hover:bg-primary/30 py-2.5 rounded-xl transition-all duration-200 cursor-pointer group" title="${linkTitle}">
+                   const userIdentifier = encodeURIComponent(u.name || u.username || u.id);
+                   const subUrl = `${window.location.origin}/sub/${userIdentifier}`;
+                   let linkHtml = `
+                   <button onclick="navigator.clipboard.writeText('${subUrl}'); alert(lang === 'fa' ? 'لینک سابسکریپشن کپی شد!' : 'Subscription URL copied!');" class="native-press flex-1 flex flex-col items-center justify-center gap-0.5 text-primary hover:text-primary bg-primary/5 hover:bg-primary/15 dark:bg-primary/10 dark:hover:bg-primary/30 py-2.5 rounded-xl transition-all duration-200 cursor-pointer group" title="${linkTitle}">
                        <svg class="w-4 h-4 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                            <path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                        </svg>
                        <span class="text-[8px] font-bold opacity-70 group-hover:opacity-100 transition-opacity">${lang === 'fa' ? 'لینک' : 'Link'}</span>
-                   </button>`;
+                   </button>
+                   <a href="${subUrl}" target="_blank" class="native-press flex-1 flex flex-col items-center justify-center gap-0.5 text-sky-500 hover:text-sky-600 bg-sky-500/5 hover:bg-sky-500/15 dark:bg-sky-500/10 dark:hover:bg-sky-500/30 py-2.5 rounded-xl transition-all duration-200 cursor-pointer group" title="${lang === 'fa' ? 'مشاهده کارت اشتراک' : 'Open User Card'}">
+                       <svg class="w-4 h-4 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                           <path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                       </svg>
+                       <span class="text-[8px] font-bold opacity-70 group-hover:opacity-100 transition-opacity">${lang === 'fa' ? 'کارت' : 'Card'}</span>
+                   </a>`;
 
                    let pauseBtnHtml = `<button onclick="togglePauseUser('${u.id}')" class="native-press flex-1 flex flex-col items-center justify-center gap-0.5 ${u.isPaused ? 'text-emerald-500 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:hover:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800/30' : 'text-amber-500 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/30 dark:hover:bg-amber-900/30 border border-amber-200 dark:border-amber-800/30'} py-2.5 rounded-xl transition-all duration-200 cursor-pointer group" title="${pauseTitle}">
                        ${u.isPaused ? `

@@ -85,41 +85,84 @@ export default {
 
         // روت نمایش داشبورد
         
-        // روت تحویل لینک سابسکریپشن کلاینت‌ها (V2Ray / Streisand)
+        // روت تحویل لینک سابسکریپشن (شناسایی نام کاربر + کارت HTML مرورگر + کانفیگ Base64 برای کلاینت‌ها)
         if (reqPath.includes('/sub/')) {
-            const uuidMatch = reqPath.split('/sub/')[1];
-            if (uuidMatch) {
-                const cleanUuid = uuidMatch.split('?')[0];
+            const rawId = reqPath.split('/sub/')[1];
+            if (rawId) {
+                const cleanId = decodeURIComponent(rawId.split('?')[0].trim()).toLowerCase();
                 let userRecord = null;
-                try {
-                    const uRes = await env.IOT_DB.prepare("SELECT * FROM users WHERE uuid = ? OR id = ?").bind(cleanUuid, cleanUuid).first();
-                    userRecord = uRes;
-                } catch(e) {}
 
-                if (!userRecord) {
-                    return new Response("User not found or disabled", { status: 404 });
+                // 1. جستجو در آرایه کاربران پیکربندی پنل
+                if (sysConfig && Array.isArray(sysConfig.users)) {
+                    userRecord = sysConfig.users.find(u => 
+                        (u.name && u.name.toLowerCase() === cleanId) ||
+                        (u.username && u.username.toLowerCase() === cleanId) ||
+                        (u.id && u.id.toLowerCase() === cleanId) ||
+                        (u.uuid && u.uuid.toLowerCase() === cleanId)
+                    );
                 }
 
-                // گرفتن لیست نودهای فعال برای ساخت کانفیگ‌ها
+                // 2. جستجو در دیتابیس D1 در صورت عدم یافتن در حافظه کانفیگ
+                if (!userRecord && env.IOT_DB) {
+                    try {
+                        userRecord = await env.IOT_DB.prepare("SELECT * FROM users WHERE lower(username) = ? OR lower(uuid) = ? OR lower(id) = ?").bind(cleanId, cleanId, cleanId).first();
+                    } catch(e) {}
+                }
+
+                if (!userRecord || userRecord.isPaused) {
+                    return new Response("User not found or disabled", { 
+                        status: 404,
+                        headers: { "Content-Type": "text/plain; charset=utf-8" }
+                    });
+                }
+
+                const userUuid = userRecord.uuid || userRecord.id;
+                const displayName = userRecord.name || userRecord.username || "کاربر مِهر";
+
+                // استخراج نودهای فعال
                 let nodesList = [];
-                try {
-                    const nRes = await env.IOT_DB.prepare("SELECT * FROM nodes WHERE status = 'active'").all();
-                    nodesList = nRes.results || [];
-                } catch(e) {}
+                if (sysConfig && Array.isArray(sysConfig.nodes)) {
+                    nodesList = sysConfig.nodes.filter(n => n.status === 'active');
+                }
+                if (nodesList.length === 0 && env.IOT_DB) {
+                    try {
+                        const nRes = await env.IOT_DB.prepare("SELECT * FROM nodes WHERE status = 'active'").all();
+                        nodesList = nRes.results || [];
+                    } catch(e) {}
+                }
 
                 let vlessConfigs = [];
                 for (const node of nodesList) {
-                    let nodeHost = node.url.replace(/^https?:\/\//, '').replace(/\/$/, '');
-                    vlessConfigs.push(`vless://${cleanUuid}@${nodeHost}:443?encryption=none&security=tls&sni=${nodeHost}&type=ws&path=/vless#Mehr-${node.name}`);
+                    let host = (node.url || node.host || "").replace(/^https?:\/\//, '').replace(/\/$/, '');
+                    if (host) {
+                        vlessConfigs.push(`vless://${userUuid}@${host}:443?encryption=none&security=tls&sni=${host}&type=ws&path=/vless#Mehr-${node.name || 'Node'}`);
+                    }
                 }
 
-                if (vlessConfigs.length === 0) {
-                    // نود پیش‌فرض اگر نودی ثبت نشده باشد
-                    vlessConfigs.push(`vless://${cleanUuid}@${new URL(request.url).host}:443?encryption=none&security=tls&sni=${new URL(request.url).host}&type=ws&path=/vless#Mehr-Default`);
+                // نود پیش‌فرض سرور مِهر
+                vlessConfigs.push(`vless://${userUuid}@${url.host}:443?encryption=none&security=tls&sni=${url.host}&type=ws&path=/vless#Mehr-Default`);
+
+                const accept = request.headers.get("accept") || "";
+                const ua = (request.headers.get("user-agent") || "").toLowerCase();
+                const isBrowser = accept.includes("text/html") && !ua.includes("v2ray") && !ua.includes("karing") && !ua.includes("clash") && !ua.includes("streisand");
+
+                if (isBrowser) {
+                    const usedBytes = userRecord.used_traffic || (userRecord.traffic ? userRecord.traffic.used : 0) || 0;
+                    const limitBytes = userRecord.traffic_limit || (userRecord.limitTotalReq ? userRecord.limitTotalReq * 1024 * 1024 : 0) || 0;
+                    const usedMB = (usedBytes / (1024 * 1024)).toFixed(1);
+                    const limitMB = limitBytes > 0 ? (limitBytes / (1024 * 1024)).toFixed(0) + " MB" : "نامحدود";
+                    const expTime = userRecord.expire_time || userRecord.expiryMs || 0;
+                    const expStr = expTime > 0 ? new Date(expTime).toLocaleDateString('fa-IR') : "نامحدود";
+
+                    const pageHtml = `<!DOCTYPE html><html lang="fa" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>اشتراک ${displayName}</title><style>body{font-family:system-ui,-apple-system,sans-serif;background:#090d16;color:#f8fafc;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:16px}.card{background:#131d2e;border-radius:24px;padding:32px;width:100%;max-width:420px;box-shadow:0 20px 40px rgba(0,0,0,0.6);border:1px solid #1e293b;text-align:center}h2{margin:0 0 8px;color:#38bdf8;font-size:1.5rem}.badge{display:inline-block;padding:6px 16px;border-radius:20px;background:rgba(56,189,248,.12);color:#38bdf8;font-weight:700;margin-bottom:24px}.row{display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid #1e293b;font-size:.95rem}.btn{display:block;width:100%;box-sizing:border-box;margin-top:20px;padding:14px;border-radius:14px;background:#0284c7;color:#fff;text-decoration:none;font-weight:700;cursor:pointer;border:none;font-size:1rem;transition:background 0.2s}.btn:hover{background:#0369a1}</style></head><body><div class="card"><h2>پنل کاربری مِهر</h2><div class="badge">کاربر: ${displayName}</div><div class="row"><span>وضعیت:</span><span style="color:#4ade80;font-weight:bold;">فعال</span></div><div class="row"><span>مصرف:</span><span>${usedMB} MB / ${limitMB}</span></div><div class="row"><span>انقضا:</span><span>${expStr}</span></div><button class="btn" onclick="navigator.clipboard.writeText(window.location.href);alert('لینک اشتراک با موفقیت کپی شد!');">📋 کپی لینک برای نرم‌افزار</button></div></body></html>`;
+                    return new Response(pageHtml, { headers: { "Content-Type": "text/html; charset=utf-8" } });
                 }
 
                 return new Response(btoa(vlessConfigs.join('\n')), {
-                    headers: { "Content-Type": "text/plain; charset=utf-8" }
+                    headers: {
+                        "Content-Type": "text/plain; charset=utf-8",
+                        "Subscription-Userinfo": `upload=0; download=${userRecord.used_traffic || 0}; total=${userRecord.traffic_limit || 0}; expire=${userRecord.expire_time || 0}`
+                    }
                 });
             }
         }

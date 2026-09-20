@@ -4,6 +4,7 @@ import HTML_CONTENT from "./dashboard.html";
 const CURRENT_VERSION = "3.0.1";
 
 const SYSTEM_DEFAULTS = {
+    githubRepo: 'Reeeza2005/mehr-panel',
     name: "مِهر",
     apiRoute: "sync",
     clusterKey: "mehr_cluster_secret_2026",

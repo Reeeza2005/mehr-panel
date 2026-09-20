@@ -1,7 +1,7 @@
 import { connect } from "cloudflare:sockets";
 import HTML_CONTENT from "./dashboard.html";
 
-const CURRENT_VERSION = "3.0.1";
+const CURRENT_VERSION = "3.0.2";
 
 const SYSTEM_DEFAULTS = {
     githubRepo: 'Reeeza2005/mehr-panel',
@@ -335,6 +335,6 @@ export default {
             });
         }
 
-        return new Response("Mehr Edge Hub v3.0.1 Ready", { status: 200 });
+        return new Response("Mehr Gateway v3.0.2 Ready", { status: 200 });
     }
 };

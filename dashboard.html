@@ -5079,29 +5079,13 @@ function buildModeCheckboxes(wrapId, userMode) {
               const banner = document.getElementById('update-alert-banner');
               if (!banner) return;
               const msg = isUpToDate
-                  ? (lang === 'fa' ? `پنل شما بروز است (نسخه فعلی: v${CURRENT_VERSION}). می‌توانید در صورت نیاز سورس را مجدداً تفویض کنید.` : `Your panel is up to date (v${CURRENT_VERSION}). You can force-redeploy if needed.`)
-                  : (lang === 'fa' ? `نسخه جدیدتر (v${version}) در مخزن گیت‌هاب شما (${repo}) در دسترس است.` : `A newer version (v${version}) is available in your GitHub repo (${repo}).`);
-              document.getElementById('update-alert-text').textContent = msg;
-              const isUpToDate = (version === CURRENT_VERSION && !window._updateData?.updateAvailable);
-              const banner = document.getElementById('update-alert-banner');
-              if (!banner) return;
-              const msg = isUpToDate
-                  ? (lang === 'fa' ? `پنل شما بروز است (نسخه فعلی: v${CURRENT_VERSION}). می‌توانید در صورت نیاز سورس را مجدداً تفویض کنید.` : `Your panel is up to date (v${CURRENT_VERSION}). You can force-redeploy if needed.`)
-                  : (lang === 'fa' ? `نسخه جدیدتر (v${version}) در مخزن گیت‌هاب شما (${repo}) در دسترس است.` : `A newer version (v${version}) is available in your GitHub repo (${repo}).`);
-              document.getElementById('update-alert-text').textContent = msg;
-              const banner = document.getElementById('update-alert-banner');
-              if (!banner) return;
-
-              const msg = lang === 'fa'
-                  ? 'نسخه جدیدتر (v' + version + ') در مخزن گیت‌هاب شما (' + repo + ') در دسترس است.'
-                  : 'A newer version (v' + version + ') is available in your GitHub repository (' + repo + ').';
-
+                  ? (lang === 'fa' ?  : )
+                  : (lang === 'fa' ?  : );
               document.getElementById('update-alert-text').textContent = msg;
               const ghLink = document.getElementById('update-github-link');
               if (ghLink) ghLink.href = 'https://github.com/' + repo;
               banner.classList.remove('hidden');
               banner.classList.add('flex');
-
               const changelogArea = document.getElementById('update-changelog-area');
               const changelogContent = document.getElementById('update-changelog-content');
               if (changelogArea && changelogContent) {

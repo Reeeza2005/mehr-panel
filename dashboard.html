@@ -3065,11 +3065,24 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
             loadApiKeys();
         }
 
-          function copyData(id) {
-              const input = document.getElementById(id); input.select(); navigator.clipboard.writeText(input.value);
-              const toast = document.getElementById('copy-toast');
-              toast.style.transform = 'translate(-50%, 0)'; toast.style.opacity = '1';
-              setTimeout(() => { toast.style.transform = 'translate(-50%, -5rem)'; toast.style.opacity = '0'; }, 2000);
+          function copyData(idOrText) {
+              let textToCopy = idOrText;
+              const el = document.getElementById(idOrText);
+              if (el) {
+                  textToCopy = el.value || el.textContent;
+              }
+              navigator.clipboard.writeText(textToCopy).then(() => {
+                  const toast = document.getElementById('copy-toast');
+                  if (toast) {
+                      toast.textContent = lang === 'fa' ? 'کپی شد!' : 'Copied!';
+                      toast.style.transform = 'translate(-50%, 0)'; toast.style.opacity = '1';
+                      setTimeout(() => { toast.style.transform = 'translate(-50%, -5rem)'; toast.style.opacity = '0'; }, 2000);
+                  } else {
+                      alert(lang === 'fa' ? 'کپی شد!' : 'Copied!');
+                  }
+              }).catch(() => {
+                  alert(lang === 'fa' ? 'خطا در کپی' : 'Copy failed');
+              });
           }
 
           function copyToClipboard(text) {
@@ -5050,6 +5063,20 @@ function buildModeCheckboxes(wrapId, userMode) {
           }
 
           async function showUpdateBanner(repo, version) {
+              const isUpToDate = (version === CURRENT_VERSION && !window._updateData?.updateAvailable);
+              const banner = document.getElementById('update-alert-banner');
+              if (!banner) return;
+              const msg = isUpToDate
+                  ? (lang === 'fa' ? `پنل شما بروز است (نسخه فعلی: v${CURRENT_VERSION}). می‌توانید در صورت نیاز سورس را مجدداً تفویض کنید.` : `Your panel is up to date (v${CURRENT_VERSION}). You can force-redeploy if needed.`)
+                  : (lang === 'fa' ? `نسخه جدیدتر (v${version}) در مخزن گیت‌هاب شما (${repo}) در دسترس است.` : `A newer version (v${version}) is available in your GitHub repo (${repo}).`);
+              document.getElementById('update-alert-text').textContent = msg;
+              const isUpToDate = (version === CURRENT_VERSION && !window._updateData?.updateAvailable);
+              const banner = document.getElementById('update-alert-banner');
+              if (!banner) return;
+              const msg = isUpToDate
+                  ? (lang === 'fa' ? `پنل شما بروز است (نسخه فعلی: v${CURRENT_VERSION}). می‌توانید در صورت نیاز سورس را مجدداً تفویض کنید.` : `Your panel is up to date (v${CURRENT_VERSION}). You can force-redeploy if needed.`)
+                  : (lang === 'fa' ? `نسخه جدیدتر (v${version}) در مخزن گیت‌هاب شما (${repo}) در دسترس است.` : `A newer version (v${version}) is available in your GitHub repo (${repo}).`);
+              document.getElementById('update-alert-text').textContent = msg;
               const banner = document.getElementById('update-alert-banner');
               if (!banner) return;
 

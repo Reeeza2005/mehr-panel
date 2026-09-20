@@ -2992,8 +2992,7 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
             }
         }
 
-        async 
-          function ensureDefaultNodeInProfiles() {
+        function ensureDefaultNodeInProfiles() {
               const container = document.getElementById('dyn-profiles-container');
               if (!container) return;
               const defaultCardHtml = `
@@ -3038,17 +3037,7 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                     if (elU("ov-total-reqs")) elU("ov-total-reqs").textContent = (t.totalRequests ?? 0).toLocaleString();
                     if (elU("ov-today-traffic")) elU("ov-today-traffic").textContent = (t.dailyGB ?? 0) + " " + (i18n[lang]?.ov_gb_unit || "GB");
                     if (elU("ov-today-reqs")) elU("ov-today-reqs").textContent = (t.dailyRequests ?? 0).toLocaleString();
-                    return; // skip unsafe lines
-
-                    document.getElementById('ov-total-users').textContent = s.users.total;
-                    document.getElementById('ov-active-users').textContent = s.users.active;
-                    document.getElementById('ov-paused-users').textContent = s.users.paused;
-                    document.getElementById('ov-auto-disabled').textContent = s.users.autoDisabled;
-                    document.getElementById('ov-expired-users').textContent = s.users.expired;
-                    document.getElementById('ov-total-traffic').textContent = s.traffic.totalGB + ' ' + (i18n[lang]?.ov_gb_unit || 'GB');
-                    document.getElementById('ov-total-reqs').textContent = s.traffic.totalRequests.toLocaleString();
-                    document.getElementById('ov-today-traffic').textContent = s.traffic.dailyGB + ' ' + (i18n[lang]?.ov_gb_unit || 'GB');
-                    document.getElementById('ov-today-reqs').textContent = s.traffic.dailyRequests.toLocaleString();
+                    
                     document.getElementById('ov-active-conns').textContent = s.system.activeConnections;
                     
                     document.getElementById('ov-version').textContent = 'v' + s.system.version;

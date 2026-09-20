@@ -86,8 +86,9 @@ export default {
         // روت نمایش داشبورد
         
         // روت تحویل لینک سابسکریپشن (شناسایی نام کاربر + کارت HTML مرورگر + کانفیگ Base64 برای کلاینت‌ها)
-        if (reqPath.includes('/sub/')) {
-            const rawId = reqPath.split('/sub/')[1];
+        const subParam = url.searchParams.get('sub');
+        if (reqPath.includes('/sub/') || subParam) {
+            const rawId = subParam || reqPath.split('/sub/')[1];
             if (rawId) {
                 const cleanId = decodeURIComponent(rawId.split('?')[0].trim()).toLowerCase();
                 let userRecord = null;
@@ -226,6 +227,21 @@ export default {
                 if (body.config) {
                     sysConfig = { ...sysConfig, ...body.config, name: "مِهر" };
                     await d1Put(env, "sys_config", JSON.stringify(sysConfig));
+                    if (Array.isArray(body.config.users)) {
+                        try {
+                            for (const u of body.config.users) {
+                                const uid = u.id || u.uuid;
+                                const uname = u.name || u.username || 'User';
+                                if (uid) {
+                                    await env.IOT_DB.prepare(
+                                        "INSERT INTO users (id, username, uuid) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET username=excluded.username, uuid=excluded.uuid"
+                                    ).bind(uid, uname, uid).run();
+                                }
+                            }
+                        } catch(dbErr) {
+                            console.error("D1 User Sync Error:", dbErr);
+                        }
+                    }
                 }
                 return jsonResponse({ success: true, config: sysConfig });
             } catch(e) {
@@ -240,7 +256,10 @@ export default {
             return jsonResponse({
                 success: true,
                 users: userList || [],
-                nodes: nodeList || [],
+                nodes: [
+                    { name: 'Default', server: url.host, port: 443, type: 'vless', tls: true, ws: true, path: '/vless' },
+                    ...(nodeList || [])
+                ],
                 stats: { total: (userList || []).length, online: (nodeList || []).length, upload: 0, download: 0 },
                 device: { cpu: 8, memory: 30, uptime: "5 days" }
             });

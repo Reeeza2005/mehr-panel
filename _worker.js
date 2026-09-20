@@ -82,6 +82,46 @@ export default {
         }
 
         // روت نمایش داشبورد
+        
+        // روت تحویل لینک سابسکریپشن کلاینت‌ها (V2Ray / Streisand)
+        if (reqPath.includes('/sub/')) {
+            const uuidMatch = reqPath.split('/sub/')[1];
+            if (uuidMatch) {
+                const cleanUuid = uuidMatch.split('?')[0];
+                let userRecord = null;
+                try {
+                    const uRes = await env.IOT_DB.prepare("SELECT * FROM users WHERE uuid = ? OR id = ?").bind(cleanUuid, cleanUuid).first();
+                    userRecord = uRes;
+                } catch(e) {}
+
+                if (!userRecord) {
+                    return new Response("User not found or disabled", { status: 404 });
+                }
+
+                // گرفتن لیست نودهای فعال برای ساخت کانفیگ‌ها
+                let nodesList = [];
+                try {
+                    const nRes = await env.IOT_DB.prepare("SELECT * FROM nodes WHERE status = 'active'").all();
+                    nodesList = nRes.results || [];
+                } catch(e) {}
+
+                let vlessConfigs = [];
+                for (const node of nodesList) {
+                    let nodeHost = node.url.replace(/^https?:\/\//, '').replace(/\/$/, '');
+                    vlessConfigs.push(`vless://${cleanUuid}@${nodeHost}:443?encryption=none&security=tls&sni=${nodeHost}&type=ws&path=/vless#Mehr-${node.name}`);
+                }
+
+                if (vlessConfigs.length === 0) {
+                    // نود پیش‌فرض اگر نودی ثبت نشده باشد
+                    vlessConfigs.push(`vless://${cleanUuid}@${new URL(request.url).host}:443?encryption=none&security=tls&sni=${new URL(request.url).host}&type=ws&path=/vless#Mehr-Default`);
+                }
+
+                return new Response(btoa(vlessConfigs.join('\n')), {
+                    headers: { "Content-Type": "text/plain; charset=utf-8" }
+                });
+            }
+        }
+
         if (reqPath === `${routeBase}/dash`) {
             let html = HTML_CONTENT
                 .replace(/__CURRENT_VERSION__/g, CURRENT_VERSION)
@@ -96,9 +136,22 @@ export default {
             try {
                 const data = await request.json();
                 if (data.key === sysConfig.masterKey) {
+                    let userList = [];
+                    try {
+                        const dbRes = await env.IOT_DB.prepare("SELECT * FROM users").all();
+                        userList = dbRes.results || [];
+                    } catch(e) {}
+
+                    const profiles = userList.map(u => ({
+                        id: u.uuid || u.id,
+                        name: u.username || u.name || "User",
+                        sync: `${new URL(request.url).origin}/${sysConfig.apiRoute || 'sync'}/sub/${u.uuid || u.id}`
+                    }));
+
                     return jsonResponse({
                         success: true,
-                        config: sysConfig,
+                        config: { ...sysConfig, users: userList },
+                        profiles: profiles,
                         deviceId: "mehr-node-1",
                         network: { ip: "127.0.0.1", colo: "THR", loc: "Tehran, IR" },
                         version: CURRENT_VERSION

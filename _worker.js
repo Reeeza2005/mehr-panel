@@ -269,15 +269,12 @@ export default {
                     { name: 'Default', server: url.host, port: 443, type: 'vless', tls: true, ws: true, path: '/vless' },
                     ...nodeList
                 ],
-                stats: { total: userList.length, online: nodeList.length + 1, upload: 0, download: 0 },
-                system: {
-                    activeConnections: 0,
-                    cpu: 12,
-                    memory: 28,
-                    uptime: "3 days",
-                    disk: 15
-                },
-                device: { cpu: 12, memory: 28, uptime: "3 days" }
+                stats: {
+                    users: { total: userList.length, active: userList.length, paused: 0, autoDisabled: 0, expired: 0 },
+                    traffic: { totalGB: 0, dailyGB: 0, totalRequests: 0, dailyRequests: 0 },
+                    system: { activeConnections: 0, version: "3.5.0", cpu: 10, memory: 25 },
+                    usage: {}
+                }
             });
         }
 

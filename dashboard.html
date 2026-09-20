@@ -3018,9 +3018,9 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                     if (elU("ov-today-traffic")) elU("ov-today-traffic").textContent = (t.dailyGB ?? 0) + " " + (i18n[lang]?.ov_gb_unit || "GB");
                     if (elU("ov-today-reqs")) elU("ov-today-reqs").textContent = (t.dailyRequests ?? 0).toLocaleString();
                     
-                    document.getElementById('ov-active-conns').textContent = s.system.activeConnections;
+                    document.getElementById('ov-active-conns').textContent = (s.system && s.system.activeConnections != null ? s.system.activeConnections : 0);
                     
-                    document.getElementById('ov-version').textContent = 'v' + s.system.version;
+                    document.getElementById('ov-version').textContent = 'v' + (s.system && s.system.version ? s.system.version : '1.0.0');
                     
                     const usageCont = document.getElementById('usage-metrics-container');
                     if(usageCont && statsData.stats.usage && window.nahanProfiles) {
@@ -3912,7 +3912,7 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                   let copyUuidTitle = lang === 'fa' ? 'کپی شناسه' : 'Copy UUID';
 
                                        let linkHtml = `
-                    <button onclick="copySub('${u.id}')" class="native-press flex-1 flex flex-col items-center justify-center gap-0.5 text-primary hover:text-primary bg-primary/5 hover:bg-primary/15 dark:bg-primary/10 dark:hover:bg-primary/30 py-2.5 rounded-xl transition-all duration-200 cursor-pointer group" title="${linkTitle}">
+                    <button onclick="copySub('${u.name || u.username || u.id}')" class="native-press flex-1 flex flex-col items-center justify-center gap-0.5 text-primary hover:text-primary bg-primary/5 hover:bg-primary/15 dark:bg-primary/10 dark:hover:bg-primary/30 py-2.5 rounded-xl transition-all duration-200 cursor-pointer group" title="${linkTitle}">
                         <svg class="w-4 h-4 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                         </svg>

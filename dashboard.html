@@ -5078,9 +5078,12 @@ function buildModeCheckboxes(wrapId, userMode) {
               const isUpToDate = (version === CURRENT_VERSION && !window._updateData?.updateAvailable);
               const banner = document.getElementById('update-alert-banner');
               if (!banner) return;
-              const msg = isUpToDate
-                  ? (lang === 'fa' ?  : )
-                  : (lang === 'fa' ?  : );
+              let msg = '';
+              if (isUpToDate) {
+                  msg = lang === 'fa' ? 'پنل شما بروز است (نسخه فعلی: v' + CURRENT_VERSION + ').' : 'Your panel is up to date (v' + CURRENT_VERSION + ').';
+              } else {
+                  msg = lang === 'fa' ? 'نسخه جدیدتر (v' + version + ') در مخزن گیت‌هاب شما (' + repo + ') در دسترس است.' : 'A newer version (v' + version + ') is available in your GitHub repo (' + repo + ').';
+              }
               document.getElementById('update-alert-text').textContent = msg;
               const ghLink = document.getElementById('update-github-link');
               if (ghLink) ghLink.href = 'https://github.com/' + repo;

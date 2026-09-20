@@ -68,7 +68,8 @@ export default {
         let reqPath = url.pathname;
         if (reqPath.endsWith("/") && reqPath.length > 1) reqPath = reqPath.slice(0, -1);
 
-        const routeBase = `/${encodeURI(sysConfig.apiRoute)}`;
+        const cleanApiRoute = (sysConfig.apiRoute || "sync").replace(/^\/+|\/+$/g, "");
+        const routeBase = `/${encodeURI(cleanApiRoute)}`;
 
         if (request.method === "OPTIONS") {
             return new Response(null, {
@@ -122,7 +123,7 @@ export default {
             }
         }
 
-        if (reqPath === `${routeBase}/dash`) {
+        if (reqPath === `${routeBase}/dash` || reqPath === "/dash" || reqPath.endsWith("/dash")) {
             let html = HTML_CONTENT
                 .replace(/__CURRENT_VERSION__/g, CURRENT_VERSION)
                 .replace(/__HAS_DB_WARNING__/g, "");

@@ -1,0 +1,4 @@
+{
+  "version": "3.0.2",
+  "changelog": "Added in-panel 1-click update via GitHub & CF API, dynamic profile links sync."
+}

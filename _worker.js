@@ -187,14 +187,16 @@ export default {
                         userList = dbRes.results || [];
                     } catch(e) {}
 
-                                        const defaultNode = {
+                                                            const defaultNode = {
                         name: 'Default',
                         server: url.host,
                         port: 443,
                         type: 'vless',
                         tls: true,
                         ws: true,
-                        path: '/vless'
+                        path: '/vless',
+                        security: 'tls',
+                        uuid: userList.length > 0 ? (userList[0].uuid || userList[0].id) : 'default-id'
                     };
 
                     const profiles = [defaultNode];

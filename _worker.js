@@ -187,11 +187,20 @@ export default {
                         userList = dbRes.results || [];
                     } catch(e) {}
 
-                    const profiles = userList.map(u => ({
-                        id: u.uuid || u.id,
-                        name: u.username || u.name || "User",
-                        sync: `${new URL(request.url).origin}/${sysConfig.apiRoute || 'sync'}/sub/${u.uuid || u.id}`
-                    }));
+                                        const defaultNode = {
+                        name: 'Default',
+                        server: url.host,
+                        port: 443,
+                        type: 'vless',
+                        tls: true,
+                        ws: true,
+                        path: '/vless'
+                    };
+
+                    const profiles = [defaultNode];
+                    if (sysConfig.customNodes && Array.isArray(sysConfig.customNodes)) {
+                        profiles.push(...sysConfig.customNodes);
+                    }
 
                     return jsonResponse({
                         success: true,

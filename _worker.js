@@ -183,21 +183,67 @@ export default {
                     cleanEntries = [{ ip: url.hostname, name: "Default" }];
                 }
 
-                // 3. نودهای جانبی (در صورت وجود)
+                // 3. پیاده‌سازی ماتریس ضرب نهان: نودها × آی‌پی تمیز × پروکسی‌آی‌پی × پروتکل‌ها
+                // جمع‌آوری تمام تارگت‌ها (مستر + نودهای فعال فرعی)
+                const nodeTargets = [{ host: url.hostname, name: "Master", isNode: false, path: (sysConfig.apiRoute || "vless") }];
                 for (const node of nodesList) {
-                    let host = (node.url || node.host || "").replace(/^https?:\/\//, '').replace(/\/$/, '');
-                    if (host) {
-                        cleanEntries.push({ ip: host, name: node.name || "Node", isNode: true, host: host });
-				}
+                    let h = (node.url || node.host || "").replace(/^https?:\/\//, "").replace(/\/$/, "");
+                    if (h) {
+                        nodeTargets.push({ host: h, name: node.name || "Node", isNode: true, path: "vl" });
+                    }
                 }
 
-                // 4. تولید کانفیگ‌های VLESS بر اساس Clean IPها و هدرهای دامنه ورکر
-                cleanEntries.forEach(entry => {
-					const tag = entry.name ? `Mehr-${entry.name}` : `Mehr-${entry.ip}`;
-					const targetHost = entry.isNode ? entry.host : url.hostname;
-					const targetPath = entry.isNode ? "vl" : (sysConfig.apiRoute || "vless");
-					vlessConfigs.push(`vless://${userUuid}@${entry.ip}:443?encryption=none&security=tls&sni=${targetHost}&host=${targetHost}&type=ws&path=%2F${targetPath}#${encodeURIComponent(tag)}`);
-				});
+                // لیست آی‌پی‌های تمیز (اگر کاربر ست کرده باشد)
+                const userCleanIPs = cleanEntries.filter(e => !e.isNode);
+
+                // پروکسی‌آی‌پی‌ها
+                let proxyIPList = (sysConfig.proxyIP || "").split(/[,\n]/).map(p => p.trim()).filter(Boolean);
+                if (proxyIPList.length === 0) proxyIPList = [""];
+
+                // بازنشانی لیست کانفیگ‌ها
+                vlessConfigs = [];
+
+                // الف) ساخت ۲ کانفیگ نمایشی تروجان برای نمایش مصرف و انقضا در کلاینت‌ها (Nahan Info Nodes)
+                try {
+                    const targetUser = userRecord || { name: displayName, id: userUuid };
+                    const usedBytes = targetUser.traffic_used || 0;
+                    const limitBytes = targetUser.limitTotalReq || targetUser.traffic_limit || 0;
+                    const usedGbStr = (usedBytes / (1024 * 1024 * 1024)).toFixed(2) + "GB";
+                    const limitGbStr = limitBytes ? (limitBytes / (1024 * 1024 * 1024)).toFixed(2) + "GB" : "نامحدود";
+                    const trafficTag = `📊 مصرف: ${usedGbStr} از ${limitGbStr}`;
+
+                    let expTag = "⏳ انقضا: نامحدود";
+                    if (targetUser.expiryMs || targetUser.expire_time) {
+                        const expMs = targetUser.expiryMs || targetUser.expire_time;
+                        const daysLeft = Math.max(0, Math.ceil((expMs - Date.now()) / (1000 * 60 * 60 * 24)));
+                        const expDate = new Date(expMs).toISOString().split("T")[0];
+                        expTag = `⏳ انقضا: ${expDate} (${daysLeft} روز)`;
+                    }
+
+                    // درج دو کانفیگ مجازی تروجان در ابتدای سابسکریپشن
+                    vlessConfigs.push(`trojan://00000000-0000-0000-0000-000000000000@1.1.1.1:443?security=tls&sni=${url.hostname}&type=ws&path=%2F#${encodeURIComponent(trafficTag)}`);
+                    vlessConfigs.push(`trojan://00000000-0000-0000-0000-000000000000@1.0.0.1:443?security=tls&sni=${url.hostname}&type=ws&path=%2F#${encodeURIComponent(expTag)}`);
+                } catch(err) {}
+
+                // ب) ماتریس ضرب کانفیگ‌های عملیاتی
+                for (const target of nodeTargets) {
+                    // در صورت وجود آی‌پی تمیز، خود ورکر حذف شده و فقط آی‌پی‌های تمیز استفاده می‌شوند
+                    const endpoints = userCleanIPs.length > 0 ? userCleanIPs : [{ ip: target.host, name: "Direct" }];
+
+                    for (const ep of endpoints) {
+                        for (const pip of proxyIPList) {
+                            const pipQuery = pip ? `&proxyip=${pip}` : "";
+                            const pipLabel = pip ? `-PIP` : "";
+                            const baseName = `${target.name}-${ep.name || ep.ip}${pipLabel}`;
+
+                            // کانفیگ VLESS
+                            vlessConfigs.push(`vless://${userUuid}@${ep.ip}:443?encryption=none&security=tls&sni=${target.host}&host=${target.host}&type=ws&path=%2F${target.path}${pipQuery}#${encodeURIComponent("VL-" + baseName)}`);
+
+                            // کانفیگ Trojan
+                            vlessConfigs.push(`trojan://${userUuid}@${ep.ip}:443?security=tls&sni=${target.host}&host=${target.host}&type=ws&path=%2Ftr${pipQuery}#${encodeURIComponent("TR-" + baseName)}`);
+                        }
+                    }
+                }
 
                 const accept = request.headers.get("accept") || "";
                 const ua = (request.headers.get("user-agent") || "").toLowerCase();

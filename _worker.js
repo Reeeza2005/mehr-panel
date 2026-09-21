@@ -15,7 +15,7 @@ function getAllProfiles(targetSub = null) {
 import { connect } from "cloudflare:sockets";
 import HTML_CONTENT from "./dashboard.html";
 
-const CURRENT_VERSION = "3.0.3";
+const CURRENT_VERSION = "3.5.0";
 
 const SYSTEM_DEFAULTS = {
     githubRepo: 'Reeeza2005/mehr-panel',
@@ -184,22 +184,25 @@ export default {
                 }
 
                 // 3. پیاده‌سازی ماتریس ضرب نهان: نودها × آی‌پی تمیز × پروکسی‌آی‌پی × پروتکل‌ها
-                // استخراج دقیق نودهای مجاز کاربر (پشتیبانی از userNodes و nodes)
-                const rawUserNodes = userRecord.userNodes !== undefined ? userRecord.userNodes : (userRecord.nodes !== undefined ? userRecord.nodes : null);
+// 3. پیاده‌سازی ماتریس ضرب نهان: نودها × آی‌پی تمیز × پروکسی‌آی‌پی × پروتکل‌ها
+                // الگوی استاندارد نهان برای بررسی نودهای اختصاصی کاربر
+                const rawUserNodes = userRecord.userNodes !== undefined ? userRecord.userNodes : userRecord.nodes;
                 
-                let hasUserNodeRestriction = false;
-                let allowedNodesSet = new Set();
+                let allowedHosts = new Set();
+                let hasRestriction = false;
 
                 if (rawUserNodes !== null && rawUserNodes !== undefined && rawUserNodes !== "") {
-                    hasUserNodeRestriction = true;
-                    const arr = typeof rawUserNodes === "string" ? rawUserNodes.split(/[,\n]+/) : rawUserNodes;
-                    arr.forEach(n => {
-                        const clean = String(n).trim().toLowerCase();
-                        if (clean) allowedNodesSet.add(clean);
-                    });
+                    hasRestriction = true;
+                    if (Array.isArray(rawUserNodes)) {
+                        rawUserNodes.forEach(n => allowedHosts.add(String(n).trim().toLowerCase()));
+                    } else if (typeof rawUserNodes === "string") {
+                        rawUserNodes.split(/[,\n]+/).forEach(n => {
+                            const clean = n.trim().toLowerCase();
+                            if (clean) allowedHosts.add(clean);
+                        });
+                    }
                 }
 
-                // جمع‌آوری نودهای فعال سیستم
                 let nodeTargets = [];
                 for (const node of nodesList) {
                     let h = (node.url || node.host || "").replace(/^https?:\/\//, "").replace(/\/$/, "").trim();
@@ -208,71 +211,62 @@ export default {
                     let nameLower = nodeName.toLowerCase();
 
                     if (h) {
-                        if (hasUserNodeRestriction) {
-                            // بررسی مطابقت نام یا هاست نود با لیست مجاز کاربر
-                            let matched = false;
-                            for (const allowed of allowedNodesSet) {
+                        if (hasRestriction) {
+                            let matchFound = false;
+                            for (const allowed of allowedHosts) {
                                 if (hLower === allowed || nameLower === allowed || hLower.includes(allowed) || allowed.includes(hLower)) {
-                                    matched = true;
+                                    matchFound = true;
                                     break;
                                 }
                             }
-                            if (!matched) continue; // اگر کاربر تیک این نود را نزده باشد رد می‌شود
+                            if (!matchFound) continue;
                         }
                         nodeTargets.push({ host: h, name: nodeName || "Node", isNode: true, path: "vl" });
                     }
                 }
 
-                // تفکیک آی‌پی‌های تمیز (حذف خود هاست پنل اصلی)
                 const userCleanIPs = cleanEntries.filter(e => !e.isNode && e.ip !== url.hostname);
 
-                // پروکسی‌آی‌پی‌ها
                 let proxyIPList = (sysConfig.proxyIP || "").split(/[,\n]/).map(p => p.trim()).filter(Boolean);
                 if (proxyIPList.length === 0) proxyIPList = [""];
 
-                // بازنشانی لیست کانفیگ‌ها
                 vlessConfigs = [];
 
-                // ۱. افزودن ۲ کانفیگ نمایشی تروجان جهت نمایش مصرف و انقضا در بالای لیست (Nahan Info Nodes)
                 try {
                     const targetUser = userRecord || { name: displayName, id: userUuid };
                     const usedBytes = targetUser.traffic_used || 0;
                     const limitBytes = targetUser.limitTotalReq || targetUser.traffic_limit || 0;
                     const usedGbStr = (usedBytes / (1024 * 1024 * 1024)).toFixed(2) + "GB";
                     const limitGbStr = limitBytes ? (limitBytes / (1024 * 1024 * 1024)).toFixed(2) + "GB" : "نامحدود";
-                    const trafficTag = `📊 مصرف: ${usedGbStr} از ${limitGbStr}`;
+                    const trafficTag = "📊 مصرف: " + usedGbStr + " از " + limitGbStr;
 
                     let expTag = "⏳ انقضا: نامحدود";
                     if (targetUser.expiryMs || targetUser.expire_time) {
                         const expMs = targetUser.expiryMs || targetUser.expire_time;
                         const daysLeft = Math.max(0, Math.ceil((expMs - Date.now()) / (1000 * 60 * 60 * 24)));
                         const expDate = new Date(expMs).toISOString().split("T")[0];
-                        expTag = `⏳ انقضا: ${expDate} (${daysLeft} روز)`;
+                        expTag = "⏳ انقضا: " + expDate + " (" + daysLeft + " روز)";
                     }
 
-                    vlessConfigs.push(`trojan://00000000-0000-0000-0000-000000000000@1.1.1.1:443?security=tls&sni=${url.hostname}&type=ws&path=%2F#${encodeURIComponent(trafficTag)}`);
-                    vlessConfigs.push(`trojan://00000000-0000-0000-0000-000000000000@1.0.0.1:443?security=tls&sni=${url.hostname}&type=ws&path=%2F#${encodeURIComponent(expTag)}`);
+                    vlessConfigs.push("trojan://00000000-0000-0000-0000-000000000000@1.1.1.1:443?security=tls&sni=" + url.hostname + "&type=ws&path=%2F#" + encodeURIComponent(trafficTag));
+                    vlessConfigs.push("trojan://00000000-0000-0000-0000-000000000000@1.0.0.1:443?security=tls&sni=" + url.hostname + "&type=ws&path=%2F#" + encodeURIComponent(expTag));
                 } catch(err) {}
 
-                // ۲. ماتریس ضرب کانفیگ‌ها روی نودهای فیلترشده
                 for (const target of nodeTargets) {
                     const endpoints = userCleanIPs.length > 0 ? userCleanIPs : [{ ip: target.host, name: "Direct" }];
 
                     for (const ep of endpoints) {
                         for (const pip of proxyIPList) {
-                            const pipQuery = pip ? `&proxyip=${pip}` : "";
-                            const pipLabel = pip ? `-PIP` : "";
-                            const baseTag = `${target.name}-${ep.name || ep.ip}${pipLabel}`;
+                            const pipQuery = pip ? "&proxyip=" + pip : "";
+                            const pipLabel = pip ? "-PIP" : "";
+                            const baseTag = target.name + "-" + (ep.name || ep.ip) + pipLabel;
 
-                            // کانفیگ VLESS
-                            vlessConfigs.push(`vless://${userUuid}@${ep.ip}:443?encryption=none&security=tls&sni=${target.host}&host=${target.host}&type=ws&path=%2F${target.path}${pipQuery}#${encodeURIComponent("VL-" + baseTag)}`);
-
-                            // کانفیگ Trojan
-                            vlessConfigs.push(`trojan://${userUuid}@${ep.ip}:443?security=tls&sni=${target.host}&host=${target.host}&type=ws&path=%2Ftr${pipQuery}#${encodeURIComponent("TR-" + baseTag)}`);
+                            vlessConfigs.push("vless://" + userUuid + "@" + ep.ip + ":443?encryption=none&security=tls&sni=" + target.host + "&host=" + target.host + "&type=ws&path=%2F" + target.path + pipQuery + "#" + encodeURIComponent("VL-" + baseTag));
+                            vlessConfigs.push("trojan://" + userUuid + "@" + ep.ip + ":443?security=tls&sni=" + target.host + "&host=" + target.host + "&type=ws&path=%2Ftr" + pipQuery + "#" + encodeURIComponent("TR-" + baseTag));
                         }
                     }
                 }
-
+                
                 const accept = request.headers.get("accept") || "";
                 const ua = (request.headers.get("user-agent") || "").toLowerCase();
                 const isBrowser = accept.includes("text/html") && !ua.includes("v2ray") && !ua.includes("karing") && !ua.includes("clash") && !ua.includes("streisand");

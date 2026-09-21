@@ -313,7 +313,39 @@ export default {
             return new Response("Not Found", { status: 404 });
         }
 
-        if (path === "/api/status") {
+        // هدرهای کامل CORS برای پینگ از فرانت پنل مستر
+        const corsHeaders = {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Authorization, Content-Type"
+        };
+
+        if (request.method === "OPTIONS") {
+            return new Response(null, { status: 204, headers: corsHeaders });
+        }
+
+        if (path === "/api/status" || path === "/api/stats") {
+            const authHeader = request.headers.get("Authorization") || "";
+            const token = authHeader.replace("Bearer ", "").trim();
+            if (env.API_KEY && token !== env.API_KEY) {
+                return new Response(JSON.stringify({ error: "Unauthorized" }), {
+                    status: 401,
+                    headers: { "Content-Type": "application/json", ...corsHeaders }
+                });
+            }
+            return new Response(JSON.stringify({
+                status: "active",
+                role: "edge_node",
+                version: "1.0.0",
+                protocols: ["vless", "trojan"],
+                earlyData: "2560",
+                stats: {}
+            }), {
+                status: 200,
+                headers: { "Content-Type": "application/json", ...corsHeaders }
+            });
+        }
+        if (false) {
             const authHeader = request.headers.get("Authorization") || "";
             const token = authHeader.replace("Bearer ", "").trim();
             if (env.API_KEY && token !== env.API_KEY) {

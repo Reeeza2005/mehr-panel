@@ -148,15 +148,78 @@ export default {
                 const isBrowser = accept.includes("text/html") && !ua.includes("v2ray") && !ua.includes("karing") && !ua.includes("clash") && !ua.includes("streisand");
 
                 if (isBrowser) {
-                    const usedBytes = userRecord.used_traffic || (userRecord.traffic ? userRecord.traffic.used : 0) || 0;
-                    const limitBytes = userRecord.traffic_limit || (userRecord.limitTotalReq ? userRecord.limitTotalReq * 1024 * 1024 : 0) || 0;
-                    const usedMB = (usedBytes / (1024 * 1024)).toFixed(1);
-                    const limitMB = limitBytes > 0 ? (limitBytes / (1024 * 1024)).toFixed(0) + " MB" : "نامحدود";
-                    const expTime = userRecord.expire_time || userRecord.expiryMs || 0;
-                    const expStr = expTime > 0 ? new Date(expTime).toLocaleDateString('fa-IR') : "نامحدود";
+                    const subscriptionUrl = (typeof env !== 'undefined' && env.SUBSCRIPTION_URL) || 'https://raw.githubusercontent.com/itsyebekhe/nahan/main/subscription.html';
+                    try {
+                        let html = '';
+                        try {
+                            const resp = await fetch(subscriptionUrl);
+                            if (resp.ok) html = await resp.text();
+                        } catch(e) {}
 
-                    const pageHtml = `<!DOCTYPE html><html lang="fa" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>اشتراک ${displayName}</title><style>body{font-family:system-ui,-apple-system,sans-serif;background:#090d16;color:#f8fafc;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:16px}.card{background:#131d2e;border-radius:24px;padding:32px;width:100%;max-width:420px;box-shadow:0 20px 40px rgba(0,0,0,0.6);border:1px solid #1e293b;text-align:center}h2{margin:0 0 8px;color:#38bdf8;font-size:1.5rem}.badge{display:inline-block;padding:6px 16px;border-radius:20px;background:rgba(56,189,248,.12);color:#38bdf8;font-weight:700;margin-bottom:24px}.row{display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid #1e293b;font-size:.95rem}.btn{display:block;width:100%;box-sizing:border-box;margin-top:20px;padding:14px;border-radius:14px;background:#0284c7;color:#fff;text-decoration:none;font-weight:700;cursor:pointer;border:none;font-size:1rem;transition:background 0.2s}.btn:hover{background:#0369a1}</style></head><body><div class="card"><h2>پنل کاربری مِهر</h2><div class="badge">کاربر: ${displayName}</div><div class="row"><span>وضعیت:</span><span style="color:#4ade80;font-weight:bold;">فعال</span></div><div class="row"><span>مصرف:</span><span>${usedMB} MB / ${limitMB}</span></div><div class="row"><span>انقضا:</span><span>${expStr}</span></div><button class="btn" onclick="navigator.clipboard.writeText(window.location.href);alert('لینک اشتراک با موفقیت کپی شد!');">📋 کپی لینک برای نرم‌افزار</button></div></body></html>`;
-                    return new Response(pageHtml, { headers: { "Content-Type": "text/html; charset=utf-8" } });
+                        if (!html) {
+                            html = await fetch('https://cdn.jsdelivr.net/gh/itsyebekhe/nahan@main/subscription.html').then(r => r.text()).catch(() => '');
+                        }
+
+                        const targetUser = userRecord || { name: displayName, id: userUuid };
+                        const idClean = (targetUser.id || userUuid).replace(/-/g, '').toLowerCase();
+                        const totalReqs = targetUser.traffic_used || 0;
+                        const limitTotal = targetUser.limitTotalReq || targetUser.traffic_limit || 0;
+                        const limitDaily = targetUser.limitDailyReq || 0;
+                        const totalGb = (totalReqs / (1024 * 1024 * 1024)).toFixed(2);
+                        const limitTotalGb = limitTotal ? (limitTotal / (1024 * 1024 * 1024)).toFixed(2) : '9999';
+                        const dailyGb = "0.00";
+                        const limitDailyGb = limitDaily ? (limitDaily / (1024 * 1024 * 1024)).toFixed(2) : '9999';
+                        const totalPercent = limitTotal ? Math.min(100, (totalReqs / limitTotal) * 100).toFixed(1) : '0';
+                        const dailyPercent = '0';
+
+                        let expiryDateTxt = '2099-01-01';
+                        let isExpired = false;
+                        if (targetUser.expiryMs || targetUser.expire_time) {
+                            const exp = targetUser.expiryMs || targetUser.expire_time;
+                            expiryDateTxt = new Date(exp).toISOString().split('T')[0];
+                            if (Date.now() > exp) isExpired = true;
+                        }
+
+                        let statusCode = 'active';
+                        if (targetUser.isPaused) statusCode = 'paused';
+                        else if (isExpired) statusCode = 'expired';
+                        else if (limitTotal && totalReqs >= limitTotal) statusCode = 'limit';
+
+                        let cleanUrl = new URL(url.href);
+                        cleanUrl.searchParams.delete('flag');
+                        cleanUrl.searchParams.delete('format');
+                        cleanUrl.searchParams.delete('type');
+                        cleanUrl.searchParams.delete('output');
+                        cleanUrl.searchParams.delete('raw');
+
+                        const syncNormal = cleanUrl.href;
+                        const syncRaw = cleanUrl.href + (cleanUrl.href.includes('?') ? '&flag=a' : '?flag=a');
+
+                        let totalProgress = limitTotal
+                            ? `<div class="w-full rounded-full h-1.5 mt-3 overflow-hidden progress-bar-bg"><div class="h-1.5 rounded-full" style="background: var(--accent); width: ${totalPercent}%;"></div></div><p class="text-[10px] text-muted text-right mt-1.5" data-i18n="used">${totalPercent}% Used</p>`
+                            : '<p class="text-[10px] text-muted mt-2" data-i18n="unlimitedPlan">Unlimited Plan</p>';
+
+                        let dailyProgress = '<p class="text-[10px] text-muted mt-2" data-i18n="noDailyLimit">No Daily Limit</p>';
+
+                        html = html.replace(/__USER_NAME__/g, targetUser.name || displayName);
+                        html = html.replace(/__USER_ID__/g, targetUser.id || userUuid);
+                        html = html.replace(/__STATUS_CODE__/g, statusCode);
+                        html = html.replace(/__TOTAL_GB__/g, totalGb);
+                        html = html.replace(/__LIMIT_TOTAL_GB__/g, limitTotalGb);
+                        html = html.replace(/__TOTAL_PERCENT__/g, totalPercent);
+                        html = html.replace(/__DAILY_GB__/g, dailyGb);
+                        html = html.replace(/__LIMIT_DAILY_GB__/g, limitDailyGb);
+                        html = html.replace(/__DAILY_PERCENT__/g, dailyPercent);
+                        html = html.replace(/__EXPIRY_DATE__/g, expiryDateTxt);
+                        html = html.replace(/__SYNC_NORMAL__/g, syncNormal);
+                        html = html.replace(/__SYNC_RAW__/g, syncRaw);
+                        html = html.replace(/__TOTAL_PROGRESS__/g, totalProgress);
+                        html = html.replace(/__DAILY_PROGRESS__/g, dailyProgress);
+
+                        return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+                    } catch(err) {
+                        return new Response("Subscription load error: " + err.message, { status: 500 });
+                    }
                 }
 
                 return new Response(btoa(vlessConfigs.join('\n')), {

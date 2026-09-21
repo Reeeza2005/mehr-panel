@@ -3225,31 +3225,29 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
           async function fetchClusterStats() {
               const panels = (window.nahanConfig && Array.isArray(window.nahanConfig.linkedPanels)) ? window.nahanConfig.linkedPanels : [];
               if (panels.length === 0) return;
-
-              for (const p of panels) {
+              await Promise.all(panels.map(async (p) => {
+                  const rawUrl = (p.url || "").trim();
+                  const target = rawUrl.startsWith("http") ? rawUrl : "https://" + rawUrl;
+                  const token = p.apiKey || p.api_key || window.nahanConfig?.clusterKey || "mehr_cluster_key_2026";
+                  const ctl = new AbortController();
+                  const t = setTimeout(() => ctl.abort(), 5000);
+                  const st = Date.now();
                   try {
-                      const startTime = Date.now();
-                      const res = await fetch(p.url.replace(/\/+$/, "") + "/api/stats", {
-                          headers: { "Authorization": "Bearer " + p.apiKey }
-                      });
-                      const latency = Date.now() - startTime;
-                      if (res.ok) {
-                          const data = await res.json();
-                          const stats = data.stats || {};
-                          let nodeBytes = 0;
-                          for (const [uid, b] of Object.entries(stats)) {
-                              nodeBytes += b;
-                              const cleanUid = uid.replace(/-/g, "").toLowerCase();
-                              window.clusterNodeStats.users[cleanUid] = (window.clusterNodeStats.users[cleanUid] || 0) + b;
-                          }
-                          window.clusterNodeStats.nodes[p.url] = { online: true, latency, totalBytes: nodeBytes };
+                      let res = await fetch(target.replace(/\/+$/, "") + "/api/status", {
+                          headers: { "Authorization": "Bearer " + token },
+                          signal: ctl.signal
+                      }).catch(() => null);
+                      clearTimeout(t);
+                      if (res && res.ok) {
+                          window.clusterNodeStats.nodes[p.url] = { online: true, latency: Date.now() - st, totalBytes: 0 };
                       } else {
                           window.clusterNodeStats.nodes[p.url] = { online: false, latency: 0, totalBytes: 0 };
                       }
-                  } catch (e) {
+                  } catch(e) {
+                      clearTimeout(t);
                       window.clusterNodeStats.nodes[p.url] = { online: false, latency: 0, totalBytes: 0 };
                   }
-              }
+              }));
               try { renderLinkedNodes(); } catch(e){}
           }
 

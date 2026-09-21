@@ -147,15 +147,57 @@ export default {
                 }
 
                 let vlessConfigs = [];
+
+                // 1. ورودی‌های اطلاعاتی اشتراک (Fake / Info Configs)
+                const totalReqsBytes = (userRecord.traffic_used || userRecord.used_traffic || 0);
+                const limitTotalBytes = (userRecord.traffic_limit || userRecord.limitTotalReq || 0);
+                const totalGbStr = (totalReqsBytes / (1024 * 1024 * 1024)).toFixed(2);
+                const limitGbStr = limitTotalBytes > 0 ? (limitTotalBytes / (1024 * 1024 * 1024)).toFixed(2) + " GB" : "Unlimited";
+                const usageInfo = `📊 Used: ${totalGbStr} GB / ${limitGbStr}`;
+                
+                let expiryInfo = "📅 Expiry: Never Expire";
+                const expMs = userRecord.expiryMs || userRecord.expire_time;
+                if (expMs) {
+                    const d = new Date(expMs > 1e11 ? expMs : expMs * 1000);
+                    const daysLeft = Math.ceil((d.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                    const daysStr = daysLeft >= 0 ? `${daysLeft} Days Left` : "Expired";
+                    expiryInfo = `📅 Expiry: ${d.toISOString().split('T')[0]} (${daysStr})`;
+                }
+
+                vlessConfigs.push(`trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:1080?security=none#${encodeURIComponent(usageInfo)}`);
+                vlessConfigs.push(`trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:1080?security=none#${encodeURIComponent(expiryInfo)}`);
+
+                // 2. استخراج لیست آی‌پی‌های تمیز (Clean IPs)
+                let rawCleanIps = userRecord.cleanIp || (sysConfig && sysConfig.cleanIps) || "";
+                let cleanEntries = [];
+                if (rawCleanIps) {
+                    cleanEntries = rawCleanIps.split(/[\r\n,;]+/).map(s => {
+                        let t = s.trim();
+                        if (!t) return null;
+                        let parts = t.split("#");
+                        return { ip: parts[0].trim(), name: (parts[1] || "").trim() };
+                    }).filter(Boolean);
+                }
+
+                if (cleanEntries.length === 0) {
+                    cleanEntries = [{ ip: url.hostname, name: "Default" }];
+                }
+
+                // 3. نودهای جانبی (در صورت وجود)
                 for (const node of nodesList) {
                     let host = (node.url || node.host || "").replace(/^https?:\/\//, '').replace(/\/$/, '');
                     if (host) {
-                        vlessConfigs.push(`vless://${userUuid}@${host}:443?encryption=none&security=tls&sni=${host}&type=ws&path=/vless#Mehr-${node.name || 'Node'}`);
-                    }
+                        cleanEntries.push({ ip: host, name: node.name || "Node", isNode: true, host: host });
+				}
                 }
 
-                // نود پیش‌فرض سرور مِهر
-                vlessConfigs.push(`vless://${userUuid}@${url.host}:443?encryption=none&security=tls&sni=${url.host}&type=ws&path=/vless#Mehr-Default`);
+                // 4. تولید کانفیگ‌های VLESS بر اساس Clean IPها و هدرهای دامنه ورکر
+                cleanEntries.forEach(entry => {
+					const tag = entry.name ? `Mehr-${entry.name}` : `Mehr-${entry.ip}`;
+					const targetHost = entry.isNode ? entry.host : url.hostname;
+					const targetPath = entry.isNode ? "vl" : (sysConfig.apiRoute || "vless");
+					vlessConfigs.push(`vless://${userUuid}@${entry.ip}:443?encryption=none&security=tls&sni=${targetHost}&host=${targetHost}&type=ws&path=%2F${targetPath}#${encodeURIComponent(tag)}`);
+				});
 
                 const accept = request.headers.get("accept") || "";
                 const ua = (request.headers.get("user-agent") || "").toLowerCase();

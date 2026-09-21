@@ -3026,7 +3026,8 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                     if(usageCont && statsData.stats.usage && window.nahanProfiles) {
                         let usageHtml = '';
                         window.nahanProfiles.forEach(p => {
-                            let hash = p.id.replace(/-/g, '').toLowerCase();
+                            if (!p || !p.id) p = { ...p, id: (p && p.name ? p.name : 'node-' + Math.random().toString(36).substring(2, 9)) };
+                            let hash = (p.id || 'default').replace(/-/g, '').toLowerCase();
                             let use = statsData.stats.usage[hash];
                             if(use) {
                                 let timeStr = new Date(use.last).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
@@ -3677,7 +3678,7 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                       if(usageCont && data.usage) {
                           let usageHtml = '';
                           data.profiles.forEach(p => {
-                              let hash = p.id.replace(/-/g, '').toLowerCase();
+                              let hash = (p.id || 'default').replace(/-/g, '').toLowerCase();
                               let use = data.usage[hash];
                               if(use) {
                                   let timeStr = new Date(use.last).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});

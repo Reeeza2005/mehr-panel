@@ -266,7 +266,7 @@ export default {
                 success: true,
                 users: userList,
                 nodes: [
-                    { name: 'Default', server: url.host, port: 443, type: 'vless', tls: true, ws: true, path: '/vless' },
+                    { id: '00000000-0000-0000-0000-000000000001', name: 'Default', server: url.host, port: 443, type: 'vless', tls: true, ws: true, path: '/vless' },
                     ...nodeList
                 ],
                 stats: {

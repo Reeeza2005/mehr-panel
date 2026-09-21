@@ -1,3 +1,17 @@
+
+function getAllProfiles(targetSub = null) {
+    let devId = (typeof activeDeviceId !== 'undefined' && activeDeviceId) ? activeDeviceId : (sysConfig.deviceId || "00000000-0000-0000-0000-000000000001");
+    let list = [{ id: devId, name: "Default" }];
+    if (sysConfig && Array.isArray(sysConfig.users)) {
+        sysConfig.users.forEach(u => {
+            if (u && u.name) {
+                list.push({ id: u.id || devId, name: u.name });
+            }
+        });
+    }
+    return list;
+}
+
 import { connect } from "cloudflare:sockets";
 import HTML_CONTENT from "./dashboard.html";
 

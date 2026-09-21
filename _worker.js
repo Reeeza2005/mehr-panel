@@ -184,37 +184,46 @@ export default {
                 }
 
                 // 3. پیاده‌سازی ماتریس ضرب نهان: نودها × آی‌پی تمیز × پروکسی‌آی‌پی × پروتکل‌ها
-                // استخراج نودهای مجاز کاربر (بر اساس تیک‌های خورده شده در فرم کاربر)
-                const userNodesRaw = userRecord?.nodes || userRecord?.node_ids || userRecord?.selectedNodes || "";
-                const userAllowedNodes = typeof userNodesRaw === "string" 
-                    ? userNodesRaw.split(/[,\n]/).map(s => s.trim().toLowerCase()).filter(Boolean)
-                    : (Array.isArray(userNodesRaw) ? userNodesRaw.map(s => String(s).trim().toLowerCase()) : []);
+                // استخراج نودهای انتخابی کاربر
+                // فیلد اصلی در پنل: userNodes (یا nodes در ساختار دیتابیس)
+                const rawUserNodes = (userRecord.userNodes !== undefined) ? userRecord.userNodes : userRecord.nodes;
+                
+                let filterActive = false;
+                let allowedList = [];
 
-                // جمع‌آوری تارگت‌ها (صرفاً از نودهای جانبی، حذف ورکر پنل اصلی)
-                let nodeTargets = [];
-                for (const node of nodesList) {
-                    let h = (node.url || node.host || "").replace(/^https?:\/\//, "").replace(/\/$/, "");
-                    let nodeName = (node.name || "Node").trim();
-                    if (h) {
-                        // اگر کاربر نودهای خاصی را انتخاب کرده باشد، نودهای تیک‌نخورده فیلتر می‌شوند
-                        if (userAllowedNodes.length > 0) {
-                            const isAllowed = userAllowedNodes.some(allowed => 
-                                allowed === h.toLowerCase() || 
-                                allowed === nodeName.toLowerCase() ||
-                                h.toLowerCase().includes(allowed)
-                            );
-                            if (!isAllowed) continue;
-                        }
-                        nodeTargets.push({ host: h, name: nodeName, isNode: true, path: "vl" });
+                if (rawUserNodes !== undefined && rawUserNodes !== null) {
+                    filterActive = true; // کاربر تنظیمات اختصاصی نود دارد
+                    if (typeof rawUserNodes === "string") {
+                        allowedList = rawUserNodes.split(/[,\n]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
+                    } else if (Array.isArray(rawUserNodes)) {
+                        allowedList = rawUserNodes.map(s => String(s).trim().toLowerCase()).filter(Boolean);
                     }
                 }
 
-                // در صورتی که هیچ نود فرعی فعالی در سیستم وجود نداشت، موقتاً از مستر استفاده شود
-                if (nodeTargets.length === 0 && nodesList.length === 0) {
-                    nodeTargets.push({ host: url.hostname, name: "Master", isNode: false, path: (sysConfig.apiRoute || "vless") });
+                // جمع‌آوری نودهای مجاز
+                let nodeTargets = [];
+                for (const node of nodesList) {
+                    let h = (node.url || node.host || "").replace(/^https?:\/\//, "").replace(/\/$/, "").trim();
+                    let nodeName = (node.name || "").trim();
+                    let hLower = h.toLowerCase();
+                    let nameLower = nodeName.toLowerCase();
+
+                    if (h) {
+                        if (filterActive) {
+                            // اگر کاربر تنظیم نود دارد و این نود در لیست تیک‌خورده‌ها نیست، رد شود
+                            const match = allowedList.some(allowed => 
+                                allowed === hLower || 
+                                allowed === nameLower || 
+                                hLower.includes(allowed) || 
+                                nameLower.includes(allowed)
+                            );
+                            if (!match) continue;
+                        }
+                        nodeTargets.push({ host: h, name: nodeName || "Node", isNode: true, path: "vl" });
+                    }
                 }
 
-                // تفکیک آی‌پی‌های تمیز (حذف خود هاست پنل اصلی در صورت وجود آی‌پی تمیز)
+                // تفکیک آی‌پی‌های تمیز (حذف خود هاست پنل اصلی)
                 const userCleanIPs = cleanEntries.filter(e => !e.isNode && e.ip !== url.hostname);
 
                 // پروکسی‌آی‌پی‌ها
@@ -227,7 +236,7 @@ export default {
                 // ۱. افزودن ۲ کانفیگ نمایشی تروجان جهت نمایش مصرف و انقضا در بالای لیست (Nahan Info Nodes)
                 try {
                     const targetUser = userRecord || { name: displayName, id: userUuid };
-                    const usedBytes = targetUser.traffic_used || 0;
+                    const usedBytes = targetUser.traffic_used || targetUser.used_traffic || 0;
                     const limitBytes = targetUser.limitTotalReq || targetUser.traffic_limit || 0;
                     const usedGbStr = (usedBytes / (1024 * 1024 * 1024)).toFixed(2) + "GB";
                     const limitGbStr = limitBytes ? (limitBytes / (1024 * 1024 * 1024)).toFixed(2) + "GB" : "نامحدود";
@@ -245,7 +254,7 @@ export default {
                     vlessConfigs.push(`trojan://00000000-0000-0000-0000-000000000000@1.0.0.1:443?security=tls&sni=${url.hostname}&type=ws&path=%2F#${encodeURIComponent(expTag)}`);
                 } catch(err) {}
 
-                // ۲. ماتریس ضرب کانفیگ‌ها روی نودهای مجاز کاربر
+                // ۲. ماتریس ضرب کانفیگ‌ها روی نودهای فیلترشده
                 for (const target of nodeTargets) {
                     const endpoints = userCleanIPs.length > 0 ? userCleanIPs : [{ ip: target.host, name: "Direct" }];
 
@@ -258,7 +267,7 @@ export default {
                             // کانفیگ VLESS
                             vlessConfigs.push(`vless://${userUuid}@${ep.ip}:443?encryption=none&security=tls&sni=${target.host}&host=${target.host}&type=ws&path=%2F${target.path}${pipQuery}#${encodeURIComponent("VL-" + baseTag)}`);
 
-                            // کانفیگ Trojan (مسیر استاندارد نود /tr)
+                            // کانفیگ Trojan
                             vlessConfigs.push(`trojan://${userUuid}@${ep.ip}:443?security=tls&sni=${target.host}&host=${target.host}&type=ws&path=%2Ftr${pipQuery}#${encodeURIComponent("TR-" + baseTag)}`);
                         }
                     }

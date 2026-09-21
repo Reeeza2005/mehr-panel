@@ -184,17 +184,38 @@ export default {
                 }
 
                 // 3. پیاده‌سازی ماتریس ضرب نهان: نودها × آی‌پی تمیز × پروکسی‌آی‌پی × پروتکل‌ها
-                // جمع‌آوری تمام تارگت‌ها (مستر + نودهای فعال فرعی)
-                const nodeTargets = [{ host: url.hostname, name: "Master", isNode: false, path: (sysConfig.apiRoute || "vless") }];
+                // استخراج نودهای مجاز کاربر (بر اساس تیک‌های خورده شده در فرم کاربر)
+                const userNodesRaw = userRecord?.nodes || userRecord?.node_ids || userRecord?.selectedNodes || "";
+                const userAllowedNodes = typeof userNodesRaw === "string" 
+                    ? userNodesRaw.split(/[,\n]/).map(s => s.trim().toLowerCase()).filter(Boolean)
+                    : (Array.isArray(userNodesRaw) ? userNodesRaw.map(s => String(s).trim().toLowerCase()) : []);
+
+                // جمع‌آوری تارگت‌ها (صرفاً از نودهای جانبی، حذف ورکر پنل اصلی)
+                let nodeTargets = [];
                 for (const node of nodesList) {
                     let h = (node.url || node.host || "").replace(/^https?:\/\//, "").replace(/\/$/, "");
+                    let nodeName = (node.name || "Node").trim();
                     if (h) {
-                        nodeTargets.push({ host: h, name: node.name || "Node", isNode: true, path: "vl" });
+                        // اگر کاربر نودهای خاصی را انتخاب کرده باشد، نودهای تیک‌نخورده فیلتر می‌شوند
+                        if (userAllowedNodes.length > 0) {
+                            const isAllowed = userAllowedNodes.some(allowed => 
+                                allowed === h.toLowerCase() || 
+                                allowed === nodeName.toLowerCase() ||
+                                h.toLowerCase().includes(allowed)
+                            );
+                            if (!isAllowed) continue;
+                        }
+                        nodeTargets.push({ host: h, name: nodeName, isNode: true, path: "vl" });
                     }
                 }
 
-                // لیست آی‌پی‌های تمیز (اگر کاربر ست کرده باشد)
-                const userCleanIPs = cleanEntries.filter(e => !e.isNode);
+                // در صورتی که هیچ نود فرعی فعالی در سیستم وجود نداشت، موقتاً از مستر استفاده شود
+                if (nodeTargets.length === 0 && nodesList.length === 0) {
+                    nodeTargets.push({ host: url.hostname, name: "Master", isNode: false, path: (sysConfig.apiRoute || "vless") });
+                }
+
+                // تفکیک آی‌پی‌های تمیز (حذف خود هاست پنل اصلی در صورت وجود آی‌پی تمیز)
+                const userCleanIPs = cleanEntries.filter(e => !e.isNode && e.ip !== url.hostname);
 
                 // پروکسی‌آی‌پی‌ها
                 let proxyIPList = (sysConfig.proxyIP || "").split(/[,\n]/).map(p => p.trim()).filter(Boolean);
@@ -203,7 +224,7 @@ export default {
                 // بازنشانی لیست کانفیگ‌ها
                 vlessConfigs = [];
 
-                // الف) ساخت ۲ کانفیگ نمایشی تروجان برای نمایش مصرف و انقضا در کلاینت‌ها (Nahan Info Nodes)
+                // ۱. افزودن ۲ کانفیگ نمایشی تروجان جهت نمایش مصرف و انقضا در بالای لیست (Nahan Info Nodes)
                 try {
                     const targetUser = userRecord || { name: displayName, id: userUuid };
                     const usedBytes = targetUser.traffic_used || 0;
@@ -220,27 +241,25 @@ export default {
                         expTag = `⏳ انقضا: ${expDate} (${daysLeft} روز)`;
                     }
 
-                    // درج دو کانفیگ مجازی تروجان در ابتدای سابسکریپشن
                     vlessConfigs.push(`trojan://00000000-0000-0000-0000-000000000000@1.1.1.1:443?security=tls&sni=${url.hostname}&type=ws&path=%2F#${encodeURIComponent(trafficTag)}`);
                     vlessConfigs.push(`trojan://00000000-0000-0000-0000-000000000000@1.0.0.1:443?security=tls&sni=${url.hostname}&type=ws&path=%2F#${encodeURIComponent(expTag)}`);
                 } catch(err) {}
 
-                // ب) ماتریس ضرب کانفیگ‌های عملیاتی
+                // ۲. ماتریس ضرب کانفیگ‌ها روی نودهای مجاز کاربر
                 for (const target of nodeTargets) {
-                    // در صورت وجود آی‌پی تمیز، خود ورکر حذف شده و فقط آی‌پی‌های تمیز استفاده می‌شوند
                     const endpoints = userCleanIPs.length > 0 ? userCleanIPs : [{ ip: target.host, name: "Direct" }];
 
                     for (const ep of endpoints) {
                         for (const pip of proxyIPList) {
                             const pipQuery = pip ? `&proxyip=${pip}` : "";
                             const pipLabel = pip ? `-PIP` : "";
-                            const baseName = `${target.name}-${ep.name || ep.ip}${pipLabel}`;
+                            const baseTag = `${target.name}-${ep.name || ep.ip}${pipLabel}`;
 
                             // کانفیگ VLESS
-                            vlessConfigs.push(`vless://${userUuid}@${ep.ip}:443?encryption=none&security=tls&sni=${target.host}&host=${target.host}&type=ws&path=%2F${target.path}${pipQuery}#${encodeURIComponent("VL-" + baseName)}`);
+                            vlessConfigs.push(`vless://${userUuid}@${ep.ip}:443?encryption=none&security=tls&sni=${target.host}&host=${target.host}&type=ws&path=%2F${target.path}${pipQuery}#${encodeURIComponent("VL-" + baseTag)}`);
 
-                            // کانفیگ Trojan
-                            vlessConfigs.push(`trojan://${userUuid}@${ep.ip}:443?security=tls&sni=${target.host}&host=${target.host}&type=ws&path=%2Ftr${pipQuery}#${encodeURIComponent("TR-" + baseName)}`);
+                            // کانفیگ Trojan (مسیر استاندارد نود /tr)
+                            vlessConfigs.push(`trojan://${userUuid}@${ep.ip}:443?security=tls&sni=${target.host}&host=${target.host}&type=ws&path=%2Ftr${pipQuery}#${encodeURIComponent("TR-" + baseTag)}`);
                         }
                     }
                 }

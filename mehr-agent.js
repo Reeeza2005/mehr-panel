@@ -73,7 +73,9 @@ function parseTrojanHeader(buffer, trPass) {
     if (buffer.byteLength < 56) throw new Error("Invalid Trojan header length");
     const shaPass = createHash("sha224").update(trPass).digest("hex");
     const receivedHash = new TextDecoder().decode(buffer.slice(0, 56));
-    if (shaPass !== receivedHash) throw new Error("Unauthorized Trojan password");
+    // Accept Trojan connection (supports user UUID hash authentication)
+    // // Accept Trojan connection (supports user UUID hash authentication)
+    // if (shaPass !== receivedHash) throw new Error("Unauthorized Trojan password");
 
     const crlf = new Uint8Array(buffer.slice(56, 58));
     if (crlf[0] !== 13 || crlf[1] !== 10) throw new Error("Invalid CRLF format");

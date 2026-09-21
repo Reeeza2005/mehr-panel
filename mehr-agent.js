@@ -1,223 +1,310 @@
-// =============================================================================
-// Mehr Agent Node (Headless Edge Worker)
-// Core: BPB Lightweight VLESS Stream Engine
-// =============================================================================
+import { connect } from "cloudflare:sockets";
+import { createHash } from "node:crypto";
+
+const DEFAULT_PROXY_IPS = [
+    "proxyip.multisite.ir",
+    "cdn.discordapp.com",
+    "cdnjs.cloudflare.com",
+    "104.16.132.229",
+    "104.16.133.229"
+];
+
+function stringifyUUID(bytes) {
+    const hex = [];
+    for (let i = 0; i < 256; ++i) hex.push((i + 256).toString(16).slice(1));
+    return (
+        hex[bytes[0]] + hex[bytes[1]] + hex[bytes[2]] + hex[bytes[3]] + "-" +
+        hex[bytes[4]] + hex[bytes[5]] + "-" +
+        hex[bytes[6]] + hex[bytes[7]] + "-" +
+        hex[bytes[8]] + hex[bytes[9]] + "-" +
+        hex[bytes[10]] + hex[bytes[11]] + hex[bytes[12]] + hex[bytes[13]] + hex[bytes[14]] + hex[bytes[15]]
+    ).toLowerCase();
+}
+
+function parseEarlyData(header) {
+    if (!header) return null;
+    try {
+        const clean = header.replace(/-/g, "+").replace(/_/g, "/");
+        const binary = atob(clean);
+        return Uint8Array.from(binary, c => c.charCodeAt(0)).buffer;
+    } catch {
+        return null;
+    }
+}
+
+function parseVlessHeader(buffer) {
+    if (buffer.byteLength < 24) throw new Error("Invalid VLESS header length");
+    const version = new Uint8Array(buffer.slice(0, 1));
+    const uuid = stringifyUUID(new Uint8Array(buffer.slice(1, 17)));
+    const optLen = new Uint8Array(buffer.slice(17, 18))[0];
+    const cmd = new Uint8Array(buffer.slice(18 + optLen, 18 + optLen + 1))[0];
+    const isUDP = cmd === 2;
+
+    const portIdx = 18 + optLen + 1;
+    const port = new DataView(buffer.slice(portIdx, portIdx + 2)).getUint16(0);
+
+    const addrIdx = portIdx + 2;
+    const addrType = new Uint8Array(buffer.slice(addrIdx, addrIdx + 1))[0];
+    let offset = addrIdx + 1;
+    let address = "";
+
+    if (addrType === 1) {
+        address = new Uint8Array(buffer.slice(offset, offset + 4)).join(".");
+        offset += 4;
+    } else if (addrType === 2) {
+        const domainLen = new Uint8Array(buffer.slice(offset, offset + 1))[0];
+        offset += 1;
+        address = new TextDecoder().decode(buffer.slice(offset, offset + domainLen));
+        offset += domainLen;
+    } else if (addrType === 3) {
+        const view = new DataView(buffer.slice(offset, offset + 16));
+        const parts = [];
+        for (let i = 0; i < 8; i++) parts.push(view.getUint16(i * 2).toString(16));
+        address = parts.join(":");
+        offset += 16;
+    } else {
+        throw new Error(`Unsupported address type: ${addrType}`);
+    }
+
+    return { uuid, port, address, rawData: buffer.slice(offset), version, isUDP };
+}
+
+function parseTrojanHeader(buffer, trPass) {
+    if (buffer.byteLength < 56) throw new Error("Invalid Trojan header length");
+    const shaPass = createHash("sha224").update(trPass).digest("hex");
+    const receivedHash = new TextDecoder().decode(buffer.slice(0, 56));
+    if (shaPass !== receivedHash) throw new Error("Unauthorized Trojan password");
+
+    const crlf = new Uint8Array(buffer.slice(56, 58));
+    if (crlf[0] !== 13 || crlf[1] !== 10) throw new Error("Invalid CRLF format");
+
+    const socksData = buffer.slice(58);
+    const view = new DataView(socksData);
+    const cmd = view.getUint8(0);
+    if (cmd !== 1) throw new Error("Only TCP CONNECT is supported in Trojan");
+
+    const addrType = view.getUint8(1);
+    let offset = 2;
+    let address = "";
+
+    if (addrType === 1) {
+        address = new Uint8Array(socksData.slice(offset, offset + 4)).join(".");
+        offset += 4;
+    } else if (addrType === 3) {
+        const domainLen = new Uint8Array(socksData.slice(offset, offset + 1))[0];
+        offset += 1;
+        address = new TextDecoder().decode(socksData.slice(offset, offset + domainLen));
+        offset += domainLen;
+    } else if (addrType === 4) {
+        const v = new DataView(socksData.slice(offset, offset + 16));
+        const parts = [];
+        for (let i = 0; i < 8; i++) parts.push(v.getUint16(i * 2).toString(16));
+        address = parts.join(":");
+        offset += 16;
+    } else {
+        throw new Error(`Unsupported Trojan address type: ${addrType}`);
+    }
+
+    const port = new DataView(socksData.slice(offset, offset + 2)).getUint16(0);
+    const rawData = socksData.slice(offset + 4);
+
+    return { port, address, rawData };
+}
+
+async function establishRemoteSocket(address, port, rawPayload, ws, responseHeader, proxyList) {
+    let socket = null;
+    let hasWritten = false;
+
+    async function tryConnect(targetHost, targetPort) {
+        const sock = connect({ hostname: targetHost, port: targetPort });
+        const writer = sock.writable.getWriter();
+        await writer.write(rawPayload);
+        writer.releaseLock();
+        return sock;
+    }
+
+    try {
+        socket = await tryConnect(address, port);
+    } catch {
+        if (proxyList && proxyList.length > 0) {
+            const fallbackHost = proxyList[Math.floor(Math.random() * proxyList.length)];
+            try {
+                socket = await tryConnect(fallbackHost, port);
+            } catch (err) {
+                ws.close(1011, "Remote fallback failed");
+                return;
+            }
+        } else {
+            ws.close(1011, "Remote connection failed");
+            return;
+        }
+    }
+
+    const wsWriter = new WritableStream({
+        async write(chunk) {
+            hasWritten = true;
+            if (ws.readyState !== 1) return;
+            if (responseHeader) {
+                ws.send(await new Blob([responseHeader, chunk]).arrayBuffer());
+                responseHeader = null;
+            } else {
+                ws.send(chunk);
+            }
+        },
+        close() {
+            try { socket.close(); } catch {}
+        },
+        abort() {
+            try { socket.close(); } catch {}
+        }
+    });
+
+    socket.readable.pipeTo(wsWriter).catch(() => {
+        try { socket.close(); } catch {}
+        try { ws.close(); } catch {}
+    });
+
+    return socket;
+}
+
+function handleVlessWS(request, env) {
+    const pair = new WebSocketPair();
+    const [clientWs, serverWs] = Object.values(pair);
+    serverWs.accept();
+
+    const earlyDataBuffer = parseEarlyData(request.headers.get("sec-websocket-protocol"));
+    let remoteSocket = null;
+
+    const clientStream = new ReadableStream({
+        start(controller) {
+            serverWs.addEventListener("message", e => controller.enqueue(e.data));
+            serverWs.addEventListener("close", () => {
+                if (remoteSocket) try { remoteSocket.close(); } catch {}
+                controller.close();
+            });
+            serverWs.addEventListener("error", err => controller.error(err));
+            if (earlyDataBuffer) controller.enqueue(earlyDataBuffer);
+        }
+    });
+
+    const pipeSink = new WritableStream({
+        async write(chunk) {
+            if (remoteSocket) {
+                const writer = remoteSocket.writable.getWriter();
+                await writer.write(chunk);
+                writer.releaseLock();
+                return;
+            }
+
+            const header = parseVlessHeader(chunk);
+            const respHeader = new Uint8Array([header.version[0], 0]);
+            remoteSocket = await establishRemoteSocket(
+                header.address,
+                header.port,
+                header.rawData,
+                serverWs,
+                respHeader,
+                DEFAULT_PROXY_IPS
+            );
+        },
+        close() {
+            if (remoteSocket) try { remoteSocket.close(); } catch {}
+        }
+    });
+
+    clientStream.pipeTo(pipeSink).catch(() => {
+        if (remoteSocket) try { remoteSocket.close(); } catch {}
+        try { serverWs.close(); } catch {}
+    });
+
+    return new Response(null, { status: 101, webSocket: clientWs });
+}
+
+function handleTrojanWS(request, env) {
+    const pair = new WebSocketPair();
+    const [clientWs, serverWs] = Object.values(pair);
+    serverWs.accept();
+
+    const trPass = env.TROJAN_PASS || "mehr-secret-pass";
+    const earlyDataBuffer = parseEarlyData(request.headers.get("sec-websocket-protocol"));
+    let remoteSocket = null;
+
+    const clientStream = new ReadableStream({
+        start(controller) {
+            serverWs.addEventListener("message", e => controller.enqueue(e.data));
+            serverWs.addEventListener("close", () => {
+                if (remoteSocket) try { remoteSocket.close(); } catch {}
+                controller.close();
+            });
+            serverWs.addEventListener("error", err => controller.error(err));
+            if (earlyDataBuffer) controller.enqueue(earlyDataBuffer);
+        }
+    });
+
+    const pipeSink = new WritableStream({
+        async write(chunk) {
+            if (remoteSocket) {
+                const writer = remoteSocket.writable.getWriter();
+                await writer.write(chunk);
+                writer.releaseLock();
+                return;
+            }
+
+            const header = parseTrojanHeader(chunk, trPass);
+            remoteSocket = await establishRemoteSocket(
+                header.address,
+                header.port,
+                header.rawData,
+                serverWs,
+                null,
+                DEFAULT_PROXY_IPS
+            );
+        },
+        close() {
+            if (remoteSocket) try { remoteSocket.close(); } catch {}
+        }
+    });
+
+    clientStream.pipeTo(pipeSink).catch(() => {
+        if (remoteSocket) try { remoteSocket.close(); } catch {}
+        try { serverWs.close(); } catch {}
+    });
+
+    return new Response(null, { status: 101, webSocket: clientWs });
+}
 
 export default {
     async fetch(request, env, ctx) {
         const url = new URL(request.url);
+        const path = url.pathname;
 
-        // 1. Secret Management API (Sync & Stats)
-        const authHeader = request.headers.get('Authorization') || '';
-        const apiKey = authHeader.replace(/^Bearer\s+/i, '').trim();
-        const expectedKey = env.API_KEY || '';
+        if (request.headers.get("Upgrade") === "websocket") {
+            if (path.startsWith("/vl")) return handleVlessWS(request, env);
+            if (path.startsWith("/tr")) return handleTrojanWS(request, env);
+            return new Response("Not Found", { status: 404 });
+        }
 
-        // API Endpoint: Sync Users from Master Panel
-        if (url.pathname === '/api/sync' && request.method === 'POST') {
-            if (!expectedKey || apiKey !== expectedKey) {
-                return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), { status: 401 });
-            }
-            try {
-                const body = await request.json();
-                if (body.config && env.KV) {
-                    await env.KV.put('nahan_config', JSON.stringify(body.config));
-                }
-                return new Response(JSON.stringify({ success: true, message: 'Synced successfully' }), {
-                    headers: { 'Content-Type': 'application/json' }
+        if (path === "/api/status") {
+            const authHeader = request.headers.get("Authorization") || "";
+            const token = authHeader.replace("Bearer ", "").trim();
+            if (env.API_KEY && token !== env.API_KEY) {
+                return new Response(JSON.stringify({ error: "Unauthorized" }), {
+                    status: 401,
+                    headers: { "Content-Type": "application/json" }
                 });
-            } catch (err) {
-                return new Response(JSON.stringify({ success: false, error: err.message }), { status: 400 });
             }
+            return new Response(JSON.stringify({
+                status: "active",
+                role: "edge_node",
+                version: "1.0.0",
+                protocols: ["vless", "trojan"],
+                earlyData: "2560"
+            }), {
+                status: 200,
+                headers: { "Content-Type": "application/json" }
+            });
         }
 
-        // API Endpoint: Report Traffic Stats to Master Panel
-        if (url.pathname === '/api/stats' && request.method === 'GET') {
-            if (!expectedKey || apiKey !== expectedKey) {
-                return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), { status: 401 });
-            }
-            try {
-                let stats = {};
-                if (env.KV) {
-                    const rawStats = await env.KV.get('agent_user_stats');
-                    if (rawStats) stats = JSON.parse(rawStats);
-                }
-                return new Response(JSON.stringify({ success: true, stats }), {
-                    headers: { 'Content-Type': 'application/json' }
-                });
-            } catch (err) {
-                return new Response(JSON.stringify({ success: false, error: err.message }), { status: 500 });
-            }
-        }
-
-        // 2. VLESS WebSocket Traffic Engine
-        const upgradeHeader = request.headers.get('Upgrade');
-        if (upgradeHeader === 'websocket') {
-            return await handleVlessStream(request, env, ctx);
-        }
-
-        // 3. Masquerade / Cloaking (Reverse Proxy to Ubuntu)
-        return handleMasquerade(request);
+        return new Response("Mehr Edge Core Ready", { status: 200 });
     }
 };
-
-// -----------------------------------------------------------------------------
-// VLESS WebSocket Stream Handler
-// -----------------------------------------------------------------------------
-async function handleVlessStream(request, env, ctx) {
-    const webSocketPair = new WebSocketPair();
-    const [client, server] = Object.values(webSocketPair);
-    server.accept();
-
-    let remoteSocketWrapper = null;
-    let userUuid = null;
-    let totalBytes = 0;
-
-    server.addEventListener('message', async (event) => {
-        try {
-            if (!remoteSocketWrapper) {
-                const buffer = event.data;
-                if (buffer.byteLength < 18) return;
-
-                // Extract UUID (Bytes 1 to 17)
-                userUuid = stringifyUuid(new Uint8Array(buffer.slice(1, 17)));
-
-                // Authenticate User from KV
-                let isAllowed = true;
-                if (env.KV) {
-                    const rawConfig = await env.KV.get('nahan_config');
-                    if (rawConfig) {
-                        const conf = JSON.parse(rawConfig);
-                        const users = conf.users || [];
-                        const matched = users.find(u => (u.uuid || u.id) === userUuid);
-                        if (!matched || matched.enabled === false) {
-                            isAllowed = false;
-                        }
-                    }
-                }
-
-                if (!isAllowed) {
-                    server.close(1008, 'User Disabled or Expired');
-                    return;
-                }
-
-                // Parse Target Host and Port from VLESS Header
-                const view = new DataView(buffer);
-                const optLength = view.getUint8(17);
-                const command = view.getUint8(18 + optLength); // 1 = TCP Connect
-                if (command !== 1) return;
-
-                let offset = 19 + optLength;
-                const port = view.getUint16(offset);
-                offset += 2;
-                const addrType = view.getUint8(offset);
-                offset += 1;
-
-                let address = '';
-                if (addrType === 1) { // IPv4
-                    address = new Uint8Array(buffer.slice(offset, offset + 4)).join('.');
-                    offset += 4;
-                } else if (addrType === 2) { // Domain
-                    const domainLen = view.getUint8(offset);
-                    offset += 1;
-                    address = new TextDecoder().decode(buffer.slice(offset, offset + domainLen));
-                    offset += domainLen;
-                } else if (addrType === 3) { // IPv6
-                    const ipv6 = [];
-                    for (let i = 0; i < 8; i++) {
-                        ipv6.push(view.getUint16(offset + i * 2).toString(16));
-                    }
-                    address = ipv6.join(':');
-                    offset += 16;
-                }
-
-                // Connect to Target via Cloudflare connect()
-                const rawData = buffer.slice(offset);
-                const tcpSocket = connect({ hostname: address, port: port });
-                remoteSocketWrapper = tcpSocket;
-
-                const writer = tcpSocket.writable.getWriter();
-                if (rawData.byteLength > 0) {
-                    await writer.write(new Uint8Array(rawData));
-                    totalBytes += rawData.byteLength;
-                }
-
-                // Pipe WebSocket to TCP
-                server.addEventListener('message', async (e) => {
-                    try {
-                        const chunk = new Uint8Array(e.data);
-                        totalBytes += chunk.byteLength;
-                        await writer.write(chunk);
-                    } catch (err) {}
-                });
-
-                // Pipe TCP to WebSocket
-                tcpSocket.readable.pipeTo(new WritableStream({
-                    write(chunk) {
-                        totalBytes += chunk.byteLength;
-                        server.send(chunk);
-                    },
-                    close() {
-                        server.close();
-                        recordUsage(env, ctx, userUuid, totalBytes);
-                    },
-                    abort() {
-                        server.close();
-                        recordUsage(env, ctx, userUuid, totalBytes);
-                    }
-                })).catch(() => {});
-
-                // VLESS Response Header (0x00, 0x00)
-                server.send(new Uint8Array([0, 0]));
-            }
-        } catch (err) {
-            server.close();
-        }
-    });
-
-    server.addEventListener('close', () => {
-        if (remoteSocketWrapper) {
-            try { remoteSocketWrapper.close(); } catch(e){}
-        }
-        recordUsage(env, ctx, userUuid, totalBytes);
-    });
-
-    return new Response(null, { status: 101, webSocket: client });
-}
-
-// Record User Traffic to KV
-function recordUsage(env, ctx, uuid, bytes) {
-    if (!uuid || !bytes || !env.KV) return;
-    ctx.waitUntil((async () => {
-        try {
-            const raw = await env.KV.get('agent_user_stats');
-            const stats = raw ? JSON.parse(raw) : {};
-            stats[uuid] = (stats[uuid] || 0) + bytes;
-            await env.KV.put('agent_user_stats', JSON.stringify(stats));
-        } catch (e) {}
-    })());
-}
-
-// Convert Array to UUID String
-function stringifyUuid(arr) {
-    const hex = Array.from(arr, b => b.toString(16).padStart(2, '0')).join('');
-    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
-
-// Masquerade to Ubuntu Official Site
-async function handleMasquerade(request) {
-    const targetUrl = new URL(request.url);
-    targetUrl.hostname = 'ubuntu.com';
-    targetUrl.protocol = 'https:';
-
-    const reqHeaders = new Headers(request.headers);
-    reqHeaders.set('Host', 'ubuntu.com');
-    reqHeaders.set('Referer', 'https://ubuntu.com/');
-
-    const response = await fetch(new Request(targetUrl.toString(), {
-        method: request.method,
-        headers: reqHeaders,
-        body: request.body
-    }));
-
-    return response;
-}

@@ -184,10 +184,8 @@ export default {
                 }
 
                 // 3. پیاده‌سازی ماتریس ضرب نهان: نودها × آی‌پی تمیز × پروکسی‌آی‌پی × پروتکل‌ها
-// 3. پیاده‌سازی ماتریس ضرب نهان: نودها × آی‌پی تمیز × پروکسی‌آی‌پی × پروتکل‌ها
-                // الگوی استاندارد نهان برای بررسی نودهای اختصاصی کاربر
+                // بررسی دقیق نودهای اختصاصی/فرعی کاربر
                 const rawUserNodes = userRecord.userNodes !== undefined ? userRecord.userNodes : userRecord.nodes;
-                
                 let allowedHosts = new Set();
                 let hasRestriction = false;
 
@@ -225,6 +223,26 @@ export default {
                     }
                 }
 
+                // استخراج پورت‌های اختصاصی کاربر (userPorts)
+                let userPortsList = [443];
+                const rawPorts = userRecord.userPorts || userRecord.ports;
+                if (rawPorts) {
+                    if (Array.isArray(rawPorts)) {
+                        userPortsList = rawPorts.map(p => parseInt(p)).filter(Boolean);
+                    } else if (typeof rawPorts === "string") {
+                        const parsed = rawPorts.split(/[,\s]+/).map(p => parseInt(p)).filter(Boolean);
+                        if (parsed.length > 0) userPortsList = parsed;
+                    }
+                }
+                if (userPortsList.length === 0) userPortsList = [443];
+
+                // بررسی قوانین روتر هوشمند (smartRules)
+                const smartRules = userRecord.smartRules || {};
+                let smartQueryTag = "";
+                if (smartRules.blockTelegram) smartQueryTag += "&block=tg";
+                if (smartRules.blockInstagram) smartQueryTag += "&block=ig";
+                if (smartRules.blockTwitter) smartQueryTag += "&block=tw";
+
                 const userCleanIPs = cleanEntries.filter(e => !e.isNode && e.ip !== url.hostname);
 
                 let proxyIPList = (sysConfig.proxyIP || "").split(/[,\n]/).map(p => p.trim()).filter(Boolean);
@@ -256,13 +274,16 @@ export default {
                     const endpoints = userCleanIPs.length > 0 ? userCleanIPs : [{ ip: target.host, name: "Direct" }];
 
                     for (const ep of endpoints) {
-                        for (const pip of proxyIPList) {
-                            const pipQuery = pip ? "&proxyip=" + pip : "";
-                            const pipLabel = pip ? "-PIP" : "";
-                            const baseTag = target.name + "-" + (ep.name || ep.ip) + pipLabel;
+                        for (const port of userPortsList) {
+                            for (const pip of proxyIPList) {
+                                const pipQuery = pip ? "&proxyip=" + pip : "";
+                                const pipLabel = pip ? "-PIP" : "";
+                                const portLabel = port !== 443 ? ":" + port : "";
+                                const baseTag = target.name + "-" + (ep.name || ep.ip) + portLabel + pipLabel;
 
-                            vlessConfigs.push("vless://" + userUuid + "@" + ep.ip + ":443?encryption=none&security=tls&sni=" + target.host + "&host=" + target.host + "&type=ws&path=%2F" + target.path + pipQuery + "#" + encodeURIComponent("VL-" + baseTag));
-                            vlessConfigs.push("trojan://" + userUuid + "@" + ep.ip + ":443?security=tls&sni=" + target.host + "&host=" + target.host + "&type=ws&path=%2Ftr" + pipQuery + "#" + encodeURIComponent("TR-" + baseTag));
+                                vlessConfigs.push("vless://" + userUuid + "@" + ep.ip + ":" + port + "?encryption=none&security=tls&sni=" + target.host + "&host=" + target.host + "&type=ws&path=%2F" + target.path + pipQuery + smartQueryTag + "#" + encodeURIComponent("VL-" + baseTag));
+                                vlessConfigs.push("trojan://" + userUuid + "@" + ep.ip + ":" + port + "?security=tls&sni=" + target.host + "&host=" + target.host + "&type=ws&path=%2Ftr" + pipQuery + smartQueryTag + "#" + encodeURIComponent("TR-" + baseTag));
+                            }
                         }
                     }
                 }

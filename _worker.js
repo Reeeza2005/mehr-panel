@@ -422,10 +422,10 @@ export default {
         if (reqPath === `${routeBase}/api/nodes` || reqPath.endsWith("/api/nodes")) {
             if (request.method === "GET") {
                 const { results } = await env.IOT_DB.prepare("SELECT * FROM nodes ORDER BY created_at DESC").all();
-                const now = Math.floor(Date.now() / 1000);
                 const computedNodes = (results || []).map(n => ({
                     ...n,
-                    is_online: (now - (n.last_seen || 0)) < (35 * 60)
+                    address: n.url,
+                    is_online: n.status === "active"
                 }));
                 return jsonResponse({ success: true, nodes: computedNodes });
             }

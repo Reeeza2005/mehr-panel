@@ -184,23 +184,22 @@ export default {
                 }
 
                 // 3. پیاده‌سازی ماتریس ضرب نهان: نودها × آی‌پی تمیز × پروکسی‌آی‌پی × پروتکل‌ها
-                // استخراج نودهای انتخابی کاربر
-                // فیلد اصلی در پنل: userNodes (یا nodes در ساختار دیتابیس)
-                const rawUserNodes = (userRecord.userNodes !== undefined) ? userRecord.userNodes : userRecord.nodes;
+                // استخراج دقیق نودهای مجاز کاربر (پشتیبانی از userNodes و nodes)
+                const rawUserNodes = userRecord.userNodes !== undefined ? userRecord.userNodes : (userRecord.nodes !== undefined ? userRecord.nodes : null);
                 
-                let filterActive = false;
-                let allowedList = [];
+                let hasUserNodeRestriction = false;
+                let allowedNodesSet = new Set();
 
-                if (rawUserNodes !== undefined && rawUserNodes !== null) {
-                    filterActive = true; // کاربر تنظیمات اختصاصی نود دارد
-                    if (typeof rawUserNodes === "string") {
-                        allowedList = rawUserNodes.split(/[,\n]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
-                    } else if (Array.isArray(rawUserNodes)) {
-                        allowedList = rawUserNodes.map(s => String(s).trim().toLowerCase()).filter(Boolean);
-                    }
+                if (rawUserNodes !== null && rawUserNodes !== undefined && rawUserNodes !== "") {
+                    hasUserNodeRestriction = true;
+                    const arr = typeof rawUserNodes === "string" ? rawUserNodes.split(/[,\n]+/) : rawUserNodes;
+                    arr.forEach(n => {
+                        const clean = String(n).trim().toLowerCase();
+                        if (clean) allowedNodesSet.add(clean);
+                    });
                 }
 
-                // جمع‌آوری نودهای مجاز
+                // جمع‌آوری نودهای فعال سیستم
                 let nodeTargets = [];
                 for (const node of nodesList) {
                     let h = (node.url || node.host || "").replace(/^https?:\/\//, "").replace(/\/$/, "").trim();
@@ -209,15 +208,16 @@ export default {
                     let nameLower = nodeName.toLowerCase();
 
                     if (h) {
-                        if (filterActive) {
-                            // اگر کاربر تنظیم نود دارد و این نود در لیست تیک‌خورده‌ها نیست، رد شود
-                            const match = allowedList.some(allowed => 
-                                allowed === hLower || 
-                                allowed === nameLower || 
-                                hLower.includes(allowed) || 
-                                nameLower.includes(allowed)
-                            );
-                            if (!match) continue;
+                        if (hasUserNodeRestriction) {
+                            // بررسی مطابقت نام یا هاست نود با لیست مجاز کاربر
+                            let matched = false;
+                            for (const allowed of allowedNodesSet) {
+                                if (hLower === allowed || nameLower === allowed || hLower.includes(allowed) || allowed.includes(hLower)) {
+                                    matched = true;
+                                    break;
+                                }
+                            }
+                            if (!matched) continue; // اگر کاربر تیک این نود را نزده باشد رد می‌شود
                         }
                         nodeTargets.push({ host: h, name: nodeName || "Node", isNode: true, path: "vl" });
                     }
@@ -236,7 +236,7 @@ export default {
                 // ۱. افزودن ۲ کانفیگ نمایشی تروجان جهت نمایش مصرف و انقضا در بالای لیست (Nahan Info Nodes)
                 try {
                     const targetUser = userRecord || { name: displayName, id: userUuid };
-                    const usedBytes = targetUser.traffic_used || targetUser.used_traffic || 0;
+                    const usedBytes = targetUser.traffic_used || 0;
                     const limitBytes = targetUser.limitTotalReq || targetUser.traffic_limit || 0;
                     const usedGbStr = (usedBytes / (1024 * 1024 * 1024)).toFixed(2) + "GB";
                     const limitGbStr = limitBytes ? (limitBytes / (1024 * 1024 * 1024)).toFixed(2) + "GB" : "نامحدود";

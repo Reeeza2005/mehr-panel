@@ -184,21 +184,18 @@ export default {
                 }
 
                 // 3. پیاده‌سازی ماتریس ضرب نهان: نودها × آی‌پی تمیز × پروکسی‌آی‌پی × پروتکل‌ها
-                // بررسی دقیق نودهای اختصاصی/فرعی کاربر
+                // الف) فیلتر دقیق نودهای فرعی (Slave Nodes)
                 const rawUserNodes = userRecord.userNodes !== undefined ? userRecord.userNodes : userRecord.nodes;
-                let allowedHosts = new Set();
-                let hasRestriction = false;
+                let allowedNodes = new Set();
+                let hasNodeRestriction = false;
 
-                if (rawUserNodes !== null && rawUserNodes !== undefined && rawUserNodes !== "") {
-                    hasRestriction = true;
-                    if (Array.isArray(rawUserNodes)) {
-                        rawUserNodes.forEach(n => allowedHosts.add(String(n).trim().toLowerCase()));
-                    } else if (typeof rawUserNodes === "string") {
-                        rawUserNodes.split(/[,\n]+/).forEach(n => {
-                            const clean = n.trim().toLowerCase();
-                            if (clean) allowedHosts.add(clean);
-                        });
-                    }
+                if (rawUserNodes !== null && rawUserNodes !== undefined && String(rawUserNodes).trim() !== "") {
+                    hasNodeRestriction = true;
+                    const items = Array.isArray(rawUserNodes) ? rawUserNodes : String(rawUserNodes).split(/[,\n]+/);
+                    items.forEach(n => {
+                        const clean = String(n).trim().toLowerCase();
+                        if (clean) allowedNodes.add(clean);
+                    });
                 }
 
                 let nodeTargets = [];
@@ -209,47 +206,48 @@ export default {
                     let nameLower = nodeName.toLowerCase();
 
                     if (h) {
-                        if (hasRestriction) {
-                            let matchFound = false;
-                            for (const allowed of allowedHosts) {
+                        if (hasNodeRestriction) {
+                            let matched = false;
+                            for (const allowed of allowedNodes) {
                                 if (hLower === allowed || nameLower === allowed || hLower.includes(allowed) || allowed.includes(hLower)) {
-                                    matchFound = true;
+                                    matched = true;
                                     break;
                                 }
                             }
-                            if (!matchFound) continue;
+                            if (!matched) continue; // در صورت نداشتن تیک، حذف می‌شود
                         }
                         nodeTargets.push({ host: h, name: nodeName || "Node", isNode: true, path: "vl" });
                     }
                 }
 
-                // استخراج پورت‌های اختصاصی کاربر (userPorts)
+                // ب) استخراج و استانداردسازی پورت‌های کاربر
+                const tlsPorts = new Set([443, 8443, 2053, 2083, 2087, 2096]);
                 let userPortsList = [443];
                 const rawPorts = userRecord.userPorts || userRecord.ports;
                 if (rawPorts) {
-                    if (Array.isArray(rawPorts)) {
-                        userPortsList = rawPorts.map(p => parseInt(p)).filter(Boolean);
-                    } else if (typeof rawPorts === "string") {
-                        const parsed = rawPorts.split(/[,\s]+/).map(p => parseInt(p)).filter(Boolean);
-                        if (parsed.length > 0) userPortsList = parsed;
-                    }
+                    const parsed = (Array.isArray(rawPorts) ? rawPorts : String(rawPorts).split(/[,\s]+/))
+                                    .map(p => parseInt(p, 10))
+                                    .filter(p => !isNaN(p) && p > 0);
+                    if (parsed.length > 0) userPortsList = parsed;
                 }
-                if (userPortsList.length === 0) userPortsList = [443];
 
-                // بررسی قوانین روتر هوشمند (smartRules)
-                const smartRules = userRecord.smartRules || {};
-                let smartQueryTag = "";
-                if (smartRules.blockTelegram) smartQueryTag += "&block=tg";
-                if (smartRules.blockInstagram) smartQueryTag += "&block=ig";
-                if (smartRules.blockTwitter) smartQueryTag += "&block=tw";
+                // ج) اعمال قوانین هوشمند (smartRules)
+                const smart = userRecord.smartRules || {};
+                let smartTags = [];
+                if (smart.blockTelegram) smartTags.push("NoTG");
+                if (smart.blockInstagram) smartTags.push("NoIG");
+                if (smart.blockTwitter) smartTags.push("NoX");
+                if (smart.blockPorn) smartTags.push("Safe");
+                if (smart.bypassIran) smartTags.push("IR-Direct");
+                const smartLabelSuffix = smartTags.length > 0 ? `-[${smartTags.join(",")}]` : "";
 
                 const userCleanIPs = cleanEntries.filter(e => !e.isNode && e.ip !== url.hostname);
-
                 let proxyIPList = (sysConfig.proxyIP || "").split(/[,\n]/).map(p => p.trim()).filter(Boolean);
                 if (proxyIPList.length === 0) proxyIPList = [""];
 
                 vlessConfigs = [];
 
+                // نمایش وضعیت ترافیک و اعتبار
                 try {
                     const targetUser = userRecord || { name: displayName, id: userUuid };
                     const usedBytes = targetUser.traffic_used || 0;
@@ -270,19 +268,30 @@ export default {
                     vlessConfigs.push("trojan://00000000-0000-0000-0000-000000000000@1.0.0.1:443?security=tls&sni=" + url.hostname + "&type=ws&path=%2F#" + encodeURIComponent(expTag));
                 } catch(err) {}
 
+                // تولید ماتریس کانفیگ‌ها با پشتیبانی کامل از پورت‌های TLS و غیر TLS
                 for (const target of nodeTargets) {
                     const endpoints = userCleanIPs.length > 0 ? userCleanIPs : [{ ip: target.host, name: "Direct" }];
 
                     for (const ep of endpoints) {
                         for (const port of userPortsList) {
+                            const isTls = tlsPorts.has(port);
+
                             for (const pip of proxyIPList) {
                                 const pipQuery = pip ? "&proxyip=" + pip : "";
                                 const pipLabel = pip ? "-PIP" : "";
                                 const portLabel = port !== 443 ? ":" + port : "";
-                                const baseTag = target.name + "-" + (ep.name || ep.ip) + portLabel + pipLabel;
+                                const baseTag = target.name + "-" + (ep.name || ep.ip) + portLabel + pipLabel + smartLabelSuffix;
 
-                                vlessConfigs.push("vless://" + userUuid + "@" + ep.ip + ":" + port + "?encryption=none&security=tls&sni=" + target.host + "&host=" + target.host + "&type=ws&path=%2F" + target.path + pipQuery + smartQueryTag + "#" + encodeURIComponent("VL-" + baseTag));
-                                vlessConfigs.push("trojan://" + userUuid + "@" + ep.ip + ":" + port + "?security=tls&sni=" + target.host + "&host=" + target.host + "&type=ws&path=%2Ftr" + pipQuery + smartQueryTag + "#" + encodeURIComponent("TR-" + baseTag));
+                                if (isTls) {
+                                    // پروتکل VLESS تحت TLS
+                                    vlessConfigs.push("vless://" + userUuid + "@" + ep.ip + ":" + port + "?encryption=none&security=tls&sni=" + target.host + "&host=" + target.host + "&type=ws&path=%2F" + target.path + pipQuery + "#" + encodeURIComponent("VL-" + baseTag));
+                                    
+                                    // پروتکل Trojan فقط روی پورت‌های TLS دار
+                                    vlessConfigs.push("trojan://" + userUuid + "@" + ep.ip + ":" + port + "?security=tls&sni=" + target.host + "&host=" + target.host + "&type=ws&path=%2Ftr" + pipQuery + "#" + encodeURIComponent("TR-" + baseTag));
+                                } else {
+                                    // پروتکل VLESS استاندارد بدون TLS (برای پورت‌های 80، 8080 و غیره)
+                                    vlessConfigs.push("vless://" + userUuid + "@" + ep.ip + ":" + port + "?encryption=none&security=none&host=" + target.host + "&type=ws&path=%2F" + target.path + pipQuery + "#" + encodeURIComponent("VL-HTTP-" + baseTag));
+                                }
                             }
                         }
                     }

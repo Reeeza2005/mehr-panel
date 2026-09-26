@@ -891,7 +891,32 @@ html.dark select option {
                       </div>
 
                       <!-- ADVANCED VIEW -->
-                                  <!-- View: Servers -->
+                                  <!-- Modal: Add Other Node -->
+                           <div id="modal-add-node" class="hidden fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 pb-4 sm:p-4 bg-slate-900/50 backdrop-blur-sm">
+                               <div class="bg-[var(--color-surface)]  rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md max-h-[calc(100vh-2rem)] sm:max-h-[85vh] flex flex-col shadow-2xl border border-slate-200 dark:border-darkborder">
+                                  <div class="px-6 pt-6 pb-4">
+                                      <h3 class="text-lg font-bold" data-i18n="add_node_title">Add External Node</h3>
+                                      <p class="text-xs text-slate-400 mt-1" data-i18n="add_node_desc">Enter the URL and API Key of the external panel.</p>
+                                  </div>
+                                   <div class="px-6 pb-4 space-y-4 overflow-y-auto flex-1 min-h-0">
+                                      <div>
+                                          <label class="block text-xs font-bold text-slate-500 mb-1" data-i18n="add_node_url">Node URL</label>
+                                          <input type="text" id="add-node-url" placeholder="node.example.com" class="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-darkborder bg-slate-50 dark:bg-slate-800 focus:border-primary outline-none text-sm font-mono">
+                                      </div>
+                                      <div>
+                                          <label class="block text-xs font-bold text-slate-500 mb-1" data-i18n="add_node_apikey">API Key</label>
+                                          <input type="password" id="add-node-apikey" placeholder="Reeeza2005/mehr-panel" class="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-darkborder bg-slate-50 dark:bg-slate-800 focus:border-primary outline-none text-sm font-mono pe-12">
+                                          <button type="button" onclick="const n=document.getElementById('add-node-apikey');n.type=n.type==='password'?'text':'password'" class="absolute end-14 mt-[-36px] px-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">👁️</button>
+                                      </div>
+                                  </div>
+                                  <div class="px-6 py-4 border-t border-slate-200 dark:border-darkborder flex justify-end gap-2">
+                                      <button onclick="document.getElementById('modal-add-node').classList.add('hidden')" class="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-sm" data-i18n="btn_cancel">Cancel</button>
+                                      <button onclick="commitAddNode()" class="px-4 py-2 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white font-bold text-sm" data-i18n="add_node_confirm">Add Node</button>
+                                  </div>
+                              </div>
+                          </div>
+
+            <!-- View: Servers -->
             <div id="view-servers" class="hidden space-y-4">
                 <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[var(--color-surface)] p-4 rounded-2xl border border-slate-200 dark:border-darkborder shadow-sm">
                     <div>
@@ -1174,30 +1199,7 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                           </div>
 
                           <!-- Section: Cluster -->
-                          <!-- Modal: Add Other Node -->
-                           <div id="modal-add-node" class="hidden fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 pb-4 sm:p-4 bg-slate-900/50 backdrop-blur-sm">
-                               <div class="bg-[var(--color-surface)]  rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md max-h-[calc(100vh-2rem)] sm:max-h-[85vh] flex flex-col shadow-2xl border border-slate-200 dark:border-darkborder">
-                                  <div class="px-6 pt-6 pb-4">
-                                      <h3 class="text-lg font-bold" data-i18n="add_node_title">Add External Node</h3>
-                                      <p class="text-xs text-slate-400 mt-1" data-i18n="add_node_desc">Enter the URL and API Key of the external panel.</p>
-                                  </div>
-                                   <div class="px-6 pb-4 space-y-4 overflow-y-auto flex-1 min-h-0">
-                                      <div>
-                                          <label class="block text-xs font-bold text-slate-500 mb-1" data-i18n="add_node_url">Node URL</label>
-                                          <input type="text" id="add-node-url" placeholder="node.example.com" class="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-darkborder bg-slate-50 dark:bg-slate-800 focus:border-primary outline-none text-sm font-mono">
-                                      </div>
-                                      <div>
-                                          <label class="block text-xs font-bold text-slate-500 mb-1" data-i18n="add_node_apikey">API Key</label>
-                                          <input type="password" id="add-node-apikey" placeholder="Reeeza2005/mehr-panel" class="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-darkborder bg-slate-50 dark:bg-slate-800 focus:border-primary outline-none text-sm font-mono pe-12">
-                                          <button type="button" onclick="const n=document.getElementById('add-node-apikey');n.type=n.type==='password'?'text':'password'" class="absolute end-14 mt-[-36px] px-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">👁️</button>
-                                      </div>
-                                  </div>
-                                  <div class="px-6 py-4 border-t border-slate-200 dark:border-darkborder flex justify-end gap-2">
-                                      <button onclick="document.getElementById('modal-add-node').classList.add('hidden')" class="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-sm" data-i18n="btn_cancel">Cancel</button>
-                                      <button onclick="commitAddNode()" class="px-4 py-2 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white font-bold text-sm" data-i18n="add_node_confirm">Add Node</button>
-                                  </div>
-                              </div>
-                          </div>
+                          
 
                           <!-- Section: Telegram -->
                           <div class="bg-[var(--color-surface)]  rounded-2xl border border-slate-200 dark:border-darkborder overflow-hidden" data-accordion="">
@@ -5252,17 +5254,15 @@ function buildModeCheckboxes(wrapId, userMode) {
         return (b > 0) ? (b / (1024 * 1024 * 1024)).toFixed(2) + " GB" : "0.00 GB";
     }
 
-    // باز کردن تضمینی مودال با بالاترین لایه
     window.showAddNodeModal = function () {
         const modal = document.getElementById("modal-add-node");
         if (modal) {
             modal.classList.remove("hidden");
             modal.style.display = "flex";
-            modal.style.zIndex = "9999";
             const inp = document.getElementById("add-node-url");
             if (inp) {
                 inp.value = "";
-                inp.focus();
+                setTimeout(() => inp.focus(), 50);
             }
         }
     };
@@ -5306,42 +5306,48 @@ function buildModeCheckboxes(wrapId, userMode) {
         }
     };
 
+    // پینگ معتبر و واقعی (بدون no-cors فیک)
     window.testSingleNode = async function (host, btnId) {
         const btn = document.getElementById(btnId);
         const originalText = btn ? btn.innerHTML : "";
         if (btn) {
             btn.disabled = true;
-            btn.innerHTML = `<span>در حال بررسی...</span>`;
+            btn.innerHTML = `<span>در حال سنجش...</span>`;
         }
         const t0 = Date.now();
         let ok = false;
         let lat = 0;
         try {
-            await fetch("https://" + host + "/generate_204", { method: "HEAD", mode: "no-cors", signal: AbortSignal.timeout(4000) });
-            lat = Date.now() - t0;
-            ok = true;
-        } catch (e) {
-            try {
-                await fetch("https://" + host + "/", { method: "HEAD", mode: "no-cors", signal: AbortSignal.timeout(4000) });
+            // فراخوانی مستقیم اندپوینت پینگ پنل ورکر
+            const resp = await fetch("https://" + host + "/api/ping", {
+                method: "GET",
+                signal: AbortSignal.timeout(3000)
+            });
+            if (resp.ok || resp.status === 200) {
                 lat = Date.now() - t0;
                 ok = true;
-            } catch (err) {
-                ok = false;
             }
+        } catch (e) {
+            ok = false;
         }
 
         window.clusterNodeStats.nodes[host] = window.clusterNodeStats.nodes[host] || {};
         window.clusterNodeStats.nodes[host].online = ok;
-        if (ok) window.clusterNodeStats.nodes[host].latency = lat;
+        if (ok) {
+            window.clusterNodeStats.nodes[host].latency = lat;
+            if (typeof showToast === "function") showToast(`پینگ ${host}: ${lat} میلی‌ثانیه`, "success");
+        } else {
+            window.clusterNodeStats.nodes[host].latency = "--";
+            if (typeof showToast === "function") showToast(`سرور ${host} در دسترس نیست`, "error");
+        }
 
         if (btn) {
             btn.disabled = false;
-            btn.innerHTML = ok ? `<span>${lat} ms</span>` : `<span class="text-rose-500">قطع</span>`;
+            btn.innerHTML = ok ? `<span>${lat} ms</span>` : `<span class="text-rose-500">قطع ارتباط</span>`;
         }
         window.renderTabNodes();
     };
 
-    // تست خودکار سلامت نودها در پس‌زمینه
     window.autoCheckNodesHealth = async function () {
         const cfg = (typeof getActivePanelConfig === "function") ? getActivePanelConfig() : (window.nahanConfig || {});
         const panels = Array.isArray(cfg.linkedPanels) ? cfg.linkedPanels : [];
@@ -5352,29 +5358,30 @@ function buildModeCheckboxes(wrapId, userMode) {
             
             const t0 = Date.now();
             try {
-                await fetch("https://" + host + "/generate_204", { method: "HEAD", mode: "no-cors", signal: AbortSignal.timeout(3500) });
-                const lat = Date.now() - t0;
-                window.clusterNodeStats.nodes[host] = {
-                    ...(window.clusterNodeStats.nodes[host] || {}),
-                    online: true,
-                    latency: lat
-                };
-            } catch (e) {
-                // تلاش ثانویه
-                try {
-                    await fetch("https://" + host + "/", { method: "HEAD", mode: "no-cors", signal: AbortSignal.timeout(3500) });
+                const resp = await fetch("https://" + host + "/api/ping", {
+                    method: "GET",
+                    signal: AbortSignal.timeout(3000)
+                });
+                if (resp.ok || resp.status === 200) {
                     const lat = Date.now() - t0;
                     window.clusterNodeStats.nodes[host] = {
                         ...(window.clusterNodeStats.nodes[host] || {}),
                         online: true,
                         latency: lat
                     };
-                } catch (err) {
+                } else {
                     window.clusterNodeStats.nodes[host] = {
                         ...(window.clusterNodeStats.nodes[host] || {}),
-                        online: false
+                        online: false,
+                        latency: "--"
                     };
                 }
+            } catch (err) {
+                window.clusterNodeStats.nodes[host] = {
+                    ...(window.clusterNodeStats.nodes[host] || {}),
+                    online: false,
+                    latency: "--"
+                };
             }
         }
         window.renderTabNodes();
@@ -5470,15 +5477,15 @@ function buildModeCheckboxes(wrapId, userMode) {
                     <div class="space-y-3">
                         <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-darkborder/60">
                             <div class="flex items-center gap-2">
-                                <span class="w-2.5 h-2.5 rounded-full ${isOnline ? "bg-emerald-500" : "bg-amber-500"}"></span>
+                                <span class="w-2.5 h-2.5 rounded-full ${isOnline ? "bg-emerald-500" : "bg-rose-500"}"></span>
                                 <h3 class="text-sm font-bold text-slate-800 dark:text-white flex items-center gap-1.5">
                                     <span>نود فرعی ${idx + 1}</span>
                                     ${flagEmoji ? `<span class="text-base" title="${country}">${flagEmoji}</span>` : ""}
                                     ${country ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-200 dark:bg-darkborder text-slate-700 dark:text-slate-300 font-mono font-bold">${country}</span>` : ""}
                                 </h3>
                             </div>
-                            <span class="px-2.5 py-1 text-xs font-bold rounded-lg ${isOnline ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-amber-500/10 text-amber-500"}">
-                                ${isOnline ? "آنلاین" : "در انتظار بررسی"}
+                            <span class="px-2.5 py-1 text-xs font-bold rounded-lg ${isOnline ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-rose-500/10 text-rose-500"}">
+                                ${isOnline ? "آنلاین" : "آفلاین / قطع"}
                             </span>
                         </div>
 
@@ -5508,7 +5515,7 @@ function buildModeCheckboxes(wrapId, userMode) {
 
                         <div class="flex items-center justify-between text-xs px-1 text-slate-600 dark:text-slate-300">
                             <span>تاخیر پاسخ:</span>
-                            <span class="font-mono font-bold ${isOnline ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"}">${latency}</span>
+                            <span class="font-mono font-bold ${isOnline ? "text-emerald-600 dark:text-emerald-400" : "text-rose-500"}">${latency}</span>
                         </div>
 
                         <div class="mt-2 pt-2 border-t border-slate-100 dark:border-darkborder/60 space-y-2 text-xs">
@@ -5542,7 +5549,6 @@ function buildModeCheckboxes(wrapId, userMode) {
         grid.innerHTML = html;
     };
 
-    // اجرا در ورود به تب و لود صفحه
     window.initServersTab = function() {
         window.renderTabNodes();
         window.autoCheckNodesHealth();

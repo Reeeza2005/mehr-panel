@@ -2943,7 +2943,7 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
             if(networkInterval) { clearInterval(networkInterval); networkInterval = null; }
             
             if(tab === 'servers') {
-                 if (typeof renderTabNodes === 'function') renderTabNodes();
+                 if (typeof initServersTab === 'function') initServersTab(); else if (typeof renderTabNodes === 'function') renderTabNodes();
              }
              if(tab === 'overview') {
                 loadDashboard();
@@ -5235,6 +5235,8 @@ function buildModeCheckboxes(wrapId, userMode) {
 
 <script id="cluster-manager-module">
 (function () {
+    window.clusterNodeStats = window.clusterNodeStats || { nodes: {} };
+
     function getCountryFlagEmoji(code) {
         if (!code || typeof code !== "string" || code.length !== 2) return "";
         const cc = code.toUpperCase();
@@ -5250,29 +5252,34 @@ function buildModeCheckboxes(wrapId, userMode) {
         return (b > 0) ? (b / (1024 * 1024 * 1024)).toFixed(2) + " GB" : "0.00 GB";
     }
 
+    // باز کردن تضمینی مودال با بالاترین لایه
     window.showAddNodeModal = function () {
-        const m = document.getElementById("modal-add-node");
-        if (m) {
-            m.classList.remove("hidden");
+        const modal = document.getElementById("modal-add-node");
+        if (modal) {
+            modal.classList.remove("hidden");
+            modal.style.display = "flex";
+            modal.style.zIndex = "9999";
             const inp = document.getElementById("add-node-url");
-            if (inp) inp.focus();
-        } else if (typeof showToast === "function") {
-            showToast("مودال افزودن نود یافت نشد", "error");
+            if (inp) {
+                inp.value = "";
+                inp.focus();
+            }
         }
     };
 
     window.closeAddNodeModal = function () {
-        const m = document.getElementById("modal-add-node");
-        if (m) m.classList.add("hidden");
+        const modal = document.getElementById("modal-add-node");
+        if (modal) {
+            modal.classList.add("hidden");
+            modal.style.display = "none";
+        }
     };
 
     window.updateNodeProp = function (idx, prop, val) {
         const cfg = (typeof getActivePanelConfig === "function") ? getActivePanelConfig() : (window.nahanConfig || {});
         if (cfg.linkedPanels && cfg.linkedPanels[idx]) {
             cfg.linkedPanels[idx][prop] = val;
-            if (typeof showToast === "function") {
-                showToast("تنظیمات نود اعمال شد. ذخیره تنظیمات را بزنید.", "info");
-            }
+            if (typeof showToast === "function") showToast("تنظیمات نود اعمال شد. ذخیره تنظیمات را بزنید.", "info");
         }
     };
 
@@ -5280,9 +5287,7 @@ function buildModeCheckboxes(wrapId, userMode) {
         const cfg = (typeof getActivePanelConfig === "function") ? getActivePanelConfig() : (window.nahanConfig || {});
         if (cfg.linkedPanels && cfg.linkedPanels[idx]) {
             cfg.linkedPanels[idx].useUpstream = !!enabled;
-            if (typeof showToast === "function") {
-                showToast(enabled ? "هدایت به Upstream فعال شد." : "هدایت به Upstream غیرفعال شد.", "info");
-            }
+            if (typeof showToast === "function") showToast(enabled ? "هدایت نود به Upstream فعال شد." : "هدایت نود به Upstream غیرفعال شد.", "info");
         }
     };
 
@@ -5306,32 +5311,73 @@ function buildModeCheckboxes(wrapId, userMode) {
         const originalText = btn ? btn.innerHTML : "";
         if (btn) {
             btn.disabled = true;
-            btn.innerHTML = `<span>در حال پینگ...</span>`;
+            btn.innerHTML = `<span>در حال بررسی...</span>`;
         }
         const t0 = Date.now();
+        let ok = false;
+        let lat = 0;
         try {
-            const resp = await fetch("https://" + host + "/api/ping", { method: "GET", signal: AbortSignal.timeout(5000) });
-            const lat = Date.now() - t0;
-            if (btn) btn.innerHTML = `<span>${lat} ms</span>`;
-            if (typeof showToast === "function") showToast(`پینگ ${host}: ${lat} میلی‌ثانیه`, "success");
+            await fetch("https://" + host + "/generate_204", { method: "HEAD", mode: "no-cors", signal: AbortSignal.timeout(4000) });
+            lat = Date.now() - t0;
+            ok = true;
         } catch (e) {
             try {
-                const resp2 = await fetch("https://" + host + "/generate_204", { method: "HEAD", mode: "no-cors", signal: AbortSignal.timeout(5000) });
-                const lat = Date.now() - t0;
-                if (btn) btn.innerHTML = `<span>${lat} ms</span>`;
-                if (typeof showToast === "function") showToast(`پینگ ${host}: ${lat} میلی‌ثانیه`, "success");
+                await fetch("https://" + host + "/", { method: "HEAD", mode: "no-cors", signal: AbortSignal.timeout(4000) });
+                lat = Date.now() - t0;
+                ok = true;
             } catch (err) {
-                if (btn) btn.innerHTML = `<span class="text-rose-500">قطع ارتباط</span>`;
-                if (typeof showToast === "function") showToast(`عدم پاسخ از سرور ${host}`, "error");
+                ok = false;
             }
-        } finally {
-            setTimeout(() => {
-                if (btn) {
-                    btn.disabled = false;
-                    btn.innerHTML = originalText;
-                }
-            }, 3500);
         }
+
+        window.clusterNodeStats.nodes[host] = window.clusterNodeStats.nodes[host] || {};
+        window.clusterNodeStats.nodes[host].online = ok;
+        if (ok) window.clusterNodeStats.nodes[host].latency = lat;
+
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = ok ? `<span>${lat} ms</span>` : `<span class="text-rose-500">قطع</span>`;
+        }
+        window.renderTabNodes();
+    };
+
+    // تست خودکار سلامت نودها در پس‌زمینه
+    window.autoCheckNodesHealth = async function () {
+        const cfg = (typeof getActivePanelConfig === "function") ? getActivePanelConfig() : (window.nahanConfig || {});
+        const panels = Array.isArray(cfg.linkedPanels) ? cfg.linkedPanels : [];
+        for (let p of panels) {
+            const rawUrl = (typeof p === "object" ? p.url : p) || "";
+            const host = cleanHost(rawUrl);
+            if (!host) continue;
+            
+            const t0 = Date.now();
+            try {
+                await fetch("https://" + host + "/generate_204", { method: "HEAD", mode: "no-cors", signal: AbortSignal.timeout(3500) });
+                const lat = Date.now() - t0;
+                window.clusterNodeStats.nodes[host] = {
+                    ...(window.clusterNodeStats.nodes[host] || {}),
+                    online: true,
+                    latency: lat
+                };
+            } catch (e) {
+                // تلاش ثانویه
+                try {
+                    await fetch("https://" + host + "/", { method: "HEAD", mode: "no-cors", signal: AbortSignal.timeout(3500) });
+                    const lat = Date.now() - t0;
+                    window.clusterNodeStats.nodes[host] = {
+                        ...(window.clusterNodeStats.nodes[host] || {}),
+                        online: true,
+                        latency: lat
+                    };
+                } catch (err) {
+                    window.clusterNodeStats.nodes[host] = {
+                        ...(window.clusterNodeStats.nodes[host] || {}),
+                        online: false
+                    };
+                }
+            }
+        }
+        window.renderTabNodes();
     };
 
     window.renderTabNodes = function () {
@@ -5424,15 +5470,15 @@ function buildModeCheckboxes(wrapId, userMode) {
                     <div class="space-y-3">
                         <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-darkborder/60">
                             <div class="flex items-center gap-2">
-                                <span class="w-2.5 h-2.5 rounded-full ${isOnline ? "bg-emerald-500" : "bg-rose-500"}"></span>
+                                <span class="w-2.5 h-2.5 rounded-full ${isOnline ? "bg-emerald-500" : "bg-amber-500"}"></span>
                                 <h3 class="text-sm font-bold text-slate-800 dark:text-white flex items-center gap-1.5">
                                     <span>نود فرعی ${idx + 1}</span>
                                     ${flagEmoji ? `<span class="text-base" title="${country}">${flagEmoji}</span>` : ""}
                                     ${country ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-200 dark:bg-darkborder text-slate-700 dark:text-slate-300 font-mono font-bold">${country}</span>` : ""}
                                 </h3>
                             </div>
-                            <span class="px-2.5 py-1 text-xs font-bold rounded-lg ${isOnline ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-rose-500/10 text-rose-500"}">
-                                ${isOnline ? "آنلاین" : "غیرفعال / آفلاین"}
+                            <span class="px-2.5 py-1 text-xs font-bold rounded-lg ${isOnline ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-amber-500/10 text-amber-500"}">
+                                ${isOnline ? "آنلاین" : "در انتظار بررسی"}
                             </span>
                         </div>
 
@@ -5461,7 +5507,7 @@ function buildModeCheckboxes(wrapId, userMode) {
                         </div>
 
                         <div class="flex items-center justify-between text-xs px-1 text-slate-600 dark:text-slate-300">
-                            <span>تاخیر پینگ:</span>
+                            <span>تاخیر پاسخ:</span>
                             <span class="font-mono font-bold ${isOnline ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"}">${latency}</span>
                         </div>
 
@@ -5496,10 +5542,16 @@ function buildModeCheckboxes(wrapId, userMode) {
         grid.innerHTML = html;
     };
 
+    // اجرا در ورود به تب و لود صفحه
+    window.initServersTab = function() {
+        window.renderTabNodes();
+        window.autoCheckNodesHealth();
+    };
+
     if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", window.renderTabNodes);
+        document.addEventListener("DOMContentLoaded", window.initServersTab);
     } else {
-        setTimeout(window.renderTabNodes, 300);
+        setTimeout(window.initServersTab, 300);
     }
 })();
 </script>

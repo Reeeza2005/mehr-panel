@@ -2942,7 +2942,10 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
             if(dashboardInterval) { clearInterval(dashboardInterval); dashboardInterval = null; }
             if(networkInterval) { clearInterval(networkInterval); networkInterval = null; }
             
-            if(tab === 'overview') {
+            if(tab === 'servers') {
+                 if (typeof renderTabNodes === 'function') renderTabNodes();
+             }
+             if(tab === 'overview') {
                 loadDashboard();
                 dashboardInterval = setInterval(loadDashboard, 15000);
             }
@@ -5238,18 +5241,38 @@ function buildModeCheckboxes(wrapId, userMode) {
         if (cc === "XX" || cc === "T1") return "🌐";
         return String.fromCodePoint(...[...cc].map(c => 127397 + c.charCodeAt(0)));
     }
+
     function cleanHost(s) {
         return (s || "").replace(/^[a-zA-Z]+:\/\//, "").split("/")[0].split("@").pop().split(":")[0].trim();
     }
+
     function formatGB(b) {
         return (b > 0) ? (b / (1024 * 1024 * 1024)).toFixed(2) + " GB" : "0.00 GB";
     }
+
+    window.showAddNodeModal = function () {
+        const m = document.getElementById("modal-add-node");
+        if (m) {
+            m.classList.remove("hidden");
+            const inp = document.getElementById("add-node-url");
+            if (inp) inp.focus();
+        } else if (typeof showToast === "function") {
+            showToast("مودال افزودن نود یافت نشد", "error");
+        }
+    };
+
+    window.closeAddNodeModal = function () {
+        const m = document.getElementById("modal-add-node");
+        if (m) m.classList.add("hidden");
+    };
 
     window.updateNodeProp = function (idx, prop, val) {
         const cfg = (typeof getActivePanelConfig === "function") ? getActivePanelConfig() : (window.nahanConfig || {});
         if (cfg.linkedPanels && cfg.linkedPanels[idx]) {
             cfg.linkedPanels[idx][prop] = val;
-            if (typeof showToast === "function") showToast("تنظیمات نود موقتاً اعمال شد. دکمه ذخیره تنظیمات را بزنید.", "info");
+            if (typeof showToast === "function") {
+                showToast("تنظیمات نود اعمال شد. ذخیره تنظیمات را بزنید.", "info");
+            }
         }
     };
 
@@ -5257,7 +5280,57 @@ function buildModeCheckboxes(wrapId, userMode) {
         const cfg = (typeof getActivePanelConfig === "function") ? getActivePanelConfig() : (window.nahanConfig || {});
         if (cfg.linkedPanels && cfg.linkedPanels[idx]) {
             cfg.linkedPanels[idx].useUpstream = !!enabled;
-            if (typeof showToast === "function") showToast(enabled ? "هدایت نود به Upstream فعال شد." : "هدایت نود به Upstream غیرفعال شد.", "info");
+            if (typeof showToast === "function") {
+                showToast(enabled ? "هدایت به Upstream فعال شد." : "هدایت به Upstream غیرفعال شد.", "info");
+            }
+        }
+    };
+
+    window.removeLinkedNode = function (idx) {
+        if (!confirm("آیا از حذف این نود اطمینان دارید؟")) return;
+        const cfg = (typeof getActivePanelConfig === "function") ? getActivePanelConfig() : (window.nahanConfig || {});
+        if (cfg.linkedPanels && cfg.linkedPanels[idx]) {
+            cfg.linkedPanels.splice(idx, 1);
+            if (typeof saveConfigToServer === "function") {
+                saveConfigToServer();
+            } else if (typeof saveConfig === "function") {
+                saveConfig();
+            }
+            window.renderTabNodes();
+            if (typeof showToast === "function") showToast("نود با موفقیت حذف شد.", "success");
+        }
+    };
+
+    window.testSingleNode = async function (host, btnId) {
+        const btn = document.getElementById(btnId);
+        const originalText = btn ? btn.innerHTML : "";
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = `<span>در حال پینگ...</span>`;
+        }
+        const t0 = Date.now();
+        try {
+            const resp = await fetch("https://" + host + "/api/ping", { method: "GET", signal: AbortSignal.timeout(5000) });
+            const lat = Date.now() - t0;
+            if (btn) btn.innerHTML = `<span>${lat} ms</span>`;
+            if (typeof showToast === "function") showToast(`پینگ ${host}: ${lat} میلی‌ثانیه`, "success");
+        } catch (e) {
+            try {
+                const resp2 = await fetch("https://" + host + "/generate_204", { method: "HEAD", mode: "no-cors", signal: AbortSignal.timeout(5000) });
+                const lat = Date.now() - t0;
+                if (btn) btn.innerHTML = `<span>${lat} ms</span>`;
+                if (typeof showToast === "function") showToast(`پینگ ${host}: ${lat} میلی‌ثانیه`, "success");
+            } catch (err) {
+                if (btn) btn.innerHTML = `<span class="text-rose-500">قطع ارتباط</span>`;
+                if (typeof showToast === "function") showToast(`عدم پاسخ از سرور ${host}`, "error");
+            }
+        } finally {
+            setTimeout(() => {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                }
+            }, 3500);
         }
     };
 

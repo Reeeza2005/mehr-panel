@@ -927,7 +927,7 @@ html.dark select option {
                     </div>
                     <div class="flex items-center gap-2">
                         <button onclick="if(typeof renderTabNodes==='function')renderTabNodes();showToast('داده‌ها به‌روزرسانی شدند','success')" class="px-3 py-2 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-darkborder transition flex items-center gap-1.5 shadow-sm">
-                            <span>🔄 رفرش</span>
+                            <span>🔄 به‌روزرسانی وضعیت</span>
                         </button>
                         <button onclick="showAddNodeModal()" type="button" class="px-4 py-2 text-xs font-bold rounded-xl bg-primary text-white hover:opacity-90 transition flex items-center gap-1.5 shadow-sm shadow-primary/20">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
@@ -2866,7 +2866,7 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                   }
               } catch(e){}
               try { renderUsersTable(); } catch(e){}
-              try { renderLinkedNodes(); } catch(e){}
+              try { renderLinkedNodes(); if(typeof renderTabNodes === "function") renderTabNodes(); if(typeof showToast === "function") showToast("ورکر فرعی با موفقیت اضافه شد", "success"); } catch(e){}
               try { renderFakeConfigs(window._fakeConfigs); } catch(e){}
           }
           applyLang();
@@ -3225,14 +3225,14 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
               closeAddNodeModal();
               document.getElementById('add-node-url').value = '';
               document.getElementById('add-node-apikey').value = '';
-              renderLinkedNodes();
+              renderLinkedNodes(); if(typeof renderTabNodes === "function") renderTabNodes(); if(typeof showToast === "function") showToast("ورکر فرعی با موفقیت اضافه شد", "success");
               doSaveDirectly();
           }
 
           function removeLinkedNode(idx) {
               if (!window.nahanConfig || !Array.isArray(window.nahanConfig.linkedPanels)) return;
               window.nahanConfig.linkedPanels.splice(idx, 1);
-              renderLinkedNodes();
+              renderLinkedNodes(); if(typeof renderTabNodes === "function") renderTabNodes(); if(typeof showToast === "function") showToast("ورکر فرعی با موفقیت اضافه شد", "success");
           }
 
           
@@ -3264,7 +3264,7 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                       window.clusterNodeStats.nodes[p.url] = { online: false, latency: 0, totalBytes: 0 };
                   }
               }));
-              try { renderLinkedNodes(); } catch(e){}
+              try { renderLinkedNodes(); if(typeof renderTabNodes === "function") renderTabNodes(); if(typeof showToast === "function") showToast("ورکر فرعی با موفقیت اضافه شد", "success"); } catch(e){}
           }
 
           function renderLinkedNodes() {
@@ -3463,7 +3463,7 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                       if (conf.linkedPanels) {
                           if (!window.nahanConfig) window.nahanConfig = {};
                           window.nahanConfig.linkedPanels = conf.linkedPanels;
-                          renderLinkedNodes();
+                          renderLinkedNodes(); if(typeof renderTabNodes === "function") renderTabNodes(); if(typeof showToast === "function") showToast("ورکر فرعی با موفقیت اضافه شد", "success");
                       }
 
                       updateUI();
@@ -3619,7 +3619,7 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                       window.nahanLiveUsage = data.usage || {};
                       window.nahanProfiles = data.profiles || [];
                       renderUsersTable();
-                      renderLinkedNodes();
+                      renderLinkedNodes(); if(typeof renderTabNodes === "function") renderTabNodes(); if(typeof showToast === "function") showToast("ورکر فرعی با موفقیت اضافه شد", "success");
                       try { checkUpdate(); } catch(ue) { console.error(ue); }
                        if (!silent) switchTab('overview');
 

@@ -198,20 +198,33 @@ async function getOrCreateKV(accountId, token, kvTitle) {
 }
 
 async function enableWorkerSubdomain(accountId, token, scriptName) {
-    await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/scripts/${scriptName}/subdomain`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ enabled: true })
-    });
+    try {
+        const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/scripts/${scriptName}/subdomain`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ enabled: true })
+        });
+        const d = await res.json();
+        if (!d.success && d.errors?.[0]?.code !== 10014) {
+            console.warn("⚠️ هشدار فعال‌سازی ساب‌دامین:", d.errors?.[0]?.message || "نامشخص");
+        }
+    } catch (e) {
+        console.warn("⚠️ خطا در اتصال به ساب‌دامین کلودفلر:", e.message);
+    }
 }
 
 async function getWorkerUrl(accountId, token, scriptName) {
-    const subRes = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/subdomain`, {
-        headers: { Authorization: `Bearer ${token}` }
-    });
-    const subData = await subRes.json();
-    const subdomain = subData?.result?.subdomain || "workers.dev";
-    return `https://${scriptName}.${subdomain}.workers.dev`;
+    try {
+        const subRes = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/subdomain`, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        const subData = await subRes.json();
+        const subdomain = subData?.result?.subdomain;
+        if (subdomain) {
+            return `https://${scriptName}.${subdomain}.workers.dev/sync/dash`;
+        }
+    } catch (e) {}
+    return `https://${scriptName}.workers.dev/sync/dash`;
 }
 
 function jsonRes(success, message, data = null) {

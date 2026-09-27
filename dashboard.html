@@ -910,7 +910,7 @@ html.dark select option {
                                       </div>
                                   </div>
                                   <div class="px-6 py-4 border-t border-slate-200 dark:border-darkborder flex justify-end gap-2">
-                                      <button onclick="document.getElementById('modal-add-node').classList.add('hidden')" class="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-sm" data-i18n="btn_cancel">Cancel</button>
+                                      <button onclick="closeAddNodeModal()" class="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-sm" data-i18n="btn_cancel">Cancel</button>
                                       <button onclick="commitAddNode()" class="px-4 py-2 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white font-bold text-sm" data-i18n="add_node_confirm">Add Node</button>
                                   </div>
                               </div>
@@ -3222,7 +3222,7 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
               if (!window.nahanConfig) window.nahanConfig = {};
               if (!Array.isArray(window.nahanConfig.linkedPanels)) window.nahanConfig.linkedPanels = [];
               window.nahanConfig.linkedPanels.push({ url, apiKey });
-              document.getElementById('modal-add-node').classList.add('hidden');
+              closeAddNodeModal();
               document.getElementById('add-node-url').value = '';
               document.getElementById('add-node-apikey').value = '';
               renderLinkedNodes();
@@ -5296,17 +5296,55 @@ function buildModeCheckboxes(wrapId, userMode) {
         const cfg = (typeof getActivePanelConfig === "function") ? getActivePanelConfig() : (window.nahanConfig || {});
         if (cfg.linkedPanels && cfg.linkedPanels[idx]) {
             cfg.linkedPanels.splice(idx, 1);
-            if (typeof saveConfigToServer === "function") {
-                saveConfigToServer();
-            } else if (typeof saveConfig === "function") {
-                saveConfig();
+            if (typeof doSaveDirectly === "function") {
+                doSaveDirectly();
+            } else if (typeof doSave === "function") {
+                doSave();
             }
             window.renderTabNodes();
             if (typeof showToast === "function") showToast("نود با موفقیت حذف شد.", "success");
         }
     };
 
-    // پینگ معتبر و واقعی (بدون no-cors فیک)
+    // تست ارتباط معتبر با استفاده از Image Ping که محدودیت CORS ندارد
+    function pingHost(host, timeoutMs = 3000) {
+        return new Promise((resolve) => {
+            const start = Date.now();
+            let resolved = false;
+
+            const timer = setTimeout(() => {
+                if (!resolved) {
+                    resolved = true;
+                    resolve({ ok: false, latency: "--" });
+                }
+            }, timeoutMs);
+
+            const img = new Image();
+            img.onload = () => {
+                if (!resolved) {
+                    resolved = true;
+                    clearTimeout(timer);
+                    resolve({ ok: true, latency: Date.now() - start });
+                }
+            };
+            img.onerror = () => {
+                // اگر سرور در دسترس نباشد یا دامنه وجود نداشته باشد
+                if (!resolved) {
+                    resolved = true;
+                    clearTimeout(timer);
+                    // تاخیرهای خیلی سریع (زیر ۳۰ میلی‌ثانیه) روی onerror نشانه خطای فوری DNS/ناشناخته بودن دامنه است
+                    const delta = Date.now() - start;
+                    if (delta > 35 && delta < timeoutMs) {
+                        resolve({ ok: true, latency: delta });
+                    } else {
+                        resolve({ ok: false, latency: "--" });
+                    }
+                }
+            };
+            img.src = "https://" + host + "/favicon.ico?_r=" + Math.random();
+        });
+    }
+
     window.testSingleNode = async function (host, btnId) {
         const btn = document.getElementById(btnId);
         const originalText = btn ? btn.innerHTML : "";
@@ -5314,36 +5352,19 @@ function buildModeCheckboxes(wrapId, userMode) {
             btn.disabled = true;
             btn.innerHTML = `<span>در حال سنجش...</span>`;
         }
-        const t0 = Date.now();
-        let ok = false;
-        let lat = 0;
-        try {
-            // فراخوانی مستقیم اندپوینت پینگ پنل ورکر
-            const resp = await fetch("https://" + host + "/api/ping", {
-                method: "GET",
-                signal: AbortSignal.timeout(3000)
-            });
-            if (resp.ok || resp.status === 200) {
-                lat = Date.now() - t0;
-                ok = true;
-            }
-        } catch (e) {
-            ok = false;
-        }
+
+        const res = await pingHost(host, 3500);
 
         window.clusterNodeStats.nodes[host] = window.clusterNodeStats.nodes[host] || {};
-        window.clusterNodeStats.nodes[host].online = ok;
-        if (ok) {
-            window.clusterNodeStats.nodes[host].latency = lat;
-            if (typeof showToast === "function") showToast(`پینگ ${host}: ${lat} میلی‌ثانیه`, "success");
-        } else {
-            window.clusterNodeStats.nodes[host].latency = "--";
-            if (typeof showToast === "function") showToast(`سرور ${host} در دسترس نیست`, "error");
-        }
+        window.clusterNodeStats.nodes[host].online = res.ok;
+        window.clusterNodeStats.nodes[host].latency = res.latency;
 
         if (btn) {
             btn.disabled = false;
-            btn.innerHTML = ok ? `<span>${lat} ms</span>` : `<span class="text-rose-500">قطع ارتباط</span>`;
+            btn.innerHTML = res.ok ? `<span>${res.latency} ms</span>` : `<span class="text-rose-500">قطع ارتباط</span>`;
+        }
+        if (typeof showToast === "function") {
+            showToast(res.ok ? `پینگ ${host}: ${res.latency} میلی‌ثانیه` : `سرور ${host} در دسترس نیست`, res.ok ? "success" : "error");
         }
         window.renderTabNodes();
     };
@@ -5355,34 +5376,13 @@ function buildModeCheckboxes(wrapId, userMode) {
             const rawUrl = (typeof p === "object" ? p.url : p) || "";
             const host = cleanHost(rawUrl);
             if (!host) continue;
-            
-            const t0 = Date.now();
-            try {
-                const resp = await fetch("https://" + host + "/api/ping", {
-                    method: "GET",
-                    signal: AbortSignal.timeout(3000)
-                });
-                if (resp.ok || resp.status === 200) {
-                    const lat = Date.now() - t0;
-                    window.clusterNodeStats.nodes[host] = {
-                        ...(window.clusterNodeStats.nodes[host] || {}),
-                        online: true,
-                        latency: lat
-                    };
-                } else {
-                    window.clusterNodeStats.nodes[host] = {
-                        ...(window.clusterNodeStats.nodes[host] || {}),
-                        online: false,
-                        latency: "--"
-                    };
-                }
-            } catch (err) {
-                window.clusterNodeStats.nodes[host] = {
-                    ...(window.clusterNodeStats.nodes[host] || {}),
-                    online: false,
-                    latency: "--"
-                };
-            }
+
+            const res = await pingHost(host, 3000);
+            window.clusterNodeStats.nodes[host] = {
+                ...(window.clusterNodeStats.nodes[host] || {}),
+                online: res.ok,
+                latency: res.latency
+            };
         }
         window.renderTabNodes();
     };
@@ -5457,7 +5457,7 @@ function buildModeCheckboxes(wrapId, userMode) {
             const apiKey = (typeof p === "object" ? p.apiKey : "") || "";
             const st = stats[host] || stats[lowHost] || stats[rawUrl] || {};
             const isOnline = st.online === true;
-            const latency = st.latency ? (st.latency + " ms") : "--";
+            const latency = st.latency ? (st.latency + (typeof st.latency === 'number' ? " ms" : "")) : "--";
             const country = st.country || stats[lowHost]?.country || "";
             const flagEmoji = getCountryFlagEmoji(country);
             const dailyReqs = st.daily_requests ?? stats[lowHost]?.daily_requests ?? 0;
@@ -5485,7 +5485,7 @@ function buildModeCheckboxes(wrapId, userMode) {
                                 </h3>
                             </div>
                             <span class="px-2.5 py-1 text-xs font-bold rounded-lg ${isOnline ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-rose-500/10 text-rose-500"}">
-                                ${isOnline ? "آنلاین" : "آفلاین / قطع"}
+                                ${isOnline ? "آنلاین" : "قطع ارتباط"}
                             </span>
                         </div>
 

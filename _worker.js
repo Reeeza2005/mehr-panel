@@ -453,8 +453,9 @@ export default {
                     }
                 }
                 // اگر محدودیتی اعمال شده و نودی انتخاب نشده، هیچ نودی اضافه نشود (فقط کانفیگ‌های اطلاعاتی بازگردند)
-                if (nodeTargets.length === 0 && !hasNodeRestriction) {
-                    nodeTargets.push({ host: url.hostname, name: "Master", isNode: false, path: "vl" });
+                // حفظ انحصار ترافیک برای ورکرهای فرعی: ورکر اصلی هرگز به عنوان نود ترافیکی عمل نمی کند
+                if (nodeTargets.length === 0) {
+                    vlessConfigs.push("trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:1080?security=none#" + encodeURIComponent("⚠️ No Active Sub-Workers Configured"));
                 }
 
                 // ب) استخراج و استانداردسازی پورت‌های کاربر

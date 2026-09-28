@@ -286,7 +286,7 @@ export default {
             const clean = testHost.replace(/^[a-zA-Z]+:\/\//, "").split("/")[0].split("@").pop().split(":")[0];
             try {
                 const tStart = Date.now();
-                const res = await fetch("https://" + clean + "/sync?ping=1", { cf: { cacheTtl: 0 } });
+                const res = await fetch("https://" + clean + "/sync?ping=1", { cf: { cacheTtl: 0 }, signal: AbortSignal.timeout(4000) });
                 const lat = Date.now() - tStart;
                 const ok = res.status < 500;
                 return new Response(JSON.stringify({ ok, latency: lat, status: res.status }), { headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } });
@@ -819,7 +819,7 @@ export default {
             const clean = testHost.replace(/^[a-zA-Z]+:\/\//, "").split("/")[0].split("@").pop().split(":")[0];
             try {
                 const tStart = Date.now();
-                const res = await fetch("https://" + clean + "/sync?ping=1", { cf: { cacheTtl: 0 } });
+                const res = await fetch("https://" + clean + "/sync?ping=1", { cf: { cacheTtl: 0 }, signal: AbortSignal.timeout(4000) });
                 const lat = Date.now() - tStart;
                 const ok = res.status < 500;
                 return new Response(JSON.stringify({ ok, latency: lat, status: res.status }), { headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } });
@@ -999,32 +999,15 @@ export default {
             }
                         if (request.method === "PUT") {
                 try {
-                    const uUrl = new URL(request.url);
-                    const uid = uUrl.searchParams.get("id");
                     const b = await request.json();
-                    if (!uid && !b.id) {
-                        return jsonResponse({ success: false, error: "Missing user id" }, 400);
+                    const nodeId = b.id;
+                    if (!nodeId) {
+                        return jsonResponse({ success: false, error: "Missing node id" }, 400);
                     }
-                    const targetId = uid || b.id;
-                    if (!Array.isArray(sysConfig.users)) sysConfig.users = [];
-                    let u = sysConfig.users.find(usr => usr.id === targetId || usr.name === targetId);
-                    if (!u) {
-                        return jsonResponse({ success: false, error: "User not found" }, 404);
-                    }
-                    if (b.name !== undefined) u.name = b.name;
-                    if (b.userMode !== undefined) u.userMode = b.userMode;
-                    if (b.userNodes !== undefined) u.userNodes = b.userNodes;
-                    if (b.cleanIp !== undefined) u.cleanIp = b.cleanIp;
-                    if (b.proxyIp !== undefined) u.proxyIp = b.proxyIp;
-                    if (b.userPorts !== undefined) u.userPorts = b.userPorts;
-                    if (b.trafficLimit !== undefined) u.limitTotalReq = b.trafficLimit ? Math.floor(parseFloat(b.trafficLimit) * 1024 * 1024 * 1024) : null;
-                    if (b.dailyLimit !== undefined) u.limitDailyReq = b.dailyLimit ? Math.floor(parseFloat(b.dailyLimit) * 1024 * 1024 * 1024) : null;
-                    if (b.expiryDays !== undefined) u.expiryMs = b.expiryDays ? (Date.now() + parseInt(b.expiryDays) * 86400000) : null;
-                    if (b.notes !== undefined) u.notes = b.notes;
-                    if (b.status !== undefined) u.isPaused = (b.status === "paused");
-
-                    await d1Put(env, "sys_config", JSON.stringify(sysConfig));
-                    return jsonResponse({ success: true, user: u });
+                    await env.IOT_DB.prepare(
+                        "UPDATE nodes SET name = COALESCE(?, name), address = COALESCE(?, address), url = COALESCE(?, url), status = COALESCE(?, status) WHERE id = ?"
+                    ).bind(b.name || null, b.address || b.url || null, b.url || b.address || null, b.status || null, nodeId).run();
+                    return jsonResponse({ success: true, message: "Node updated successfully" });
                 } catch(err) {
                     return jsonResponse({ success: false, error: err.message }, 500);
                 }

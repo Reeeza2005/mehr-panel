@@ -297,7 +297,21 @@ html.dark select option {
       .w-5, .h-5 { width: 1.25rem !important; height: 1.25rem !important; }
       .w-6, .h-6 { width: 1.5rem !important; height: 1.5rem !important; }
 
-    </style></head>
+    </style>
+<style>
+/* استایل تضمینی خوانایی متن‌ها در تم تاریک تب سرورها و نودها */
+.dark #view-servers .text-slate-500, 
+.dark #view-servers .text-slate-600,
+.dark #tab-nodes-grid span, 
+.dark #tab-nodes-grid p {
+    color: #cbd5e1 !important;
+}
+.dark #tab-nodes-grid h3 {
+    color: #ffffff !important;
+}
+</style>
+
+</head>
   <body class="text-[var(--color-text)] h-[100dvh] flex flex-col md:flex-row overflow-hidden selection:bg-primary selection:text-white transition-colors duration-300 bg-[var(--color-bg)]">
 
       <!-- Global Controls -->
@@ -926,7 +940,7 @@ html.dark select option {
                         <p id="tab-cluster-capacity-badge" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5" data-i18n="t4_cluster_loading">در حال بارگذاری وضعیت کلاستر...</p>
                     </div>
                     <div class="flex items-center gap-2">
-                        <button onclick="if(typeof renderTabNodes==='function')renderTabNodes();showToast('داده‌ها به‌روزرسانی شدند','success')" class="px-3 py-2 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-darkborder transition flex items-center gap-1.5 shadow-sm">
+                        <button onclick="if(typeof renderTabNodes==='function')renderTabNodes();showToast('داده‌ها به‌روزرسانی شدند','success')" class="px-3 py-2 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800/90 dark:hover:bg-slate-700 text-slate-800 dark:text-white border border-slate-300 dark:border-slate-600 transition flex items-center gap-1.5 shadow-sm">
                             <span data-i18n="t4_btn_refresh">🔄 به‌روزرسانی وضعیت</span>
                         </button>
                         <button onclick="showAddNodeModal()" type="button" class="px-4 py-2 text-xs font-bold rounded-xl bg-primary text-white hover:opacity-90 transition flex items-center gap-1.5 shadow-sm shadow-primary/20">
@@ -5504,24 +5518,24 @@ function buildModeCheckboxes(wrapId, userMode) {
                     </div>
                     <span class="px-2.5 py-1 text-xs font-bold rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">${isEn ? "Online" : "آنلاین"}</span>
                 </div>
-                <div class="text-xs font-mono text-slate-700 dark:text-slate-200 bg-slate-50 dark:bg-darkcard/80 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder text-center">
+                <div class="text-xs font-mono font-semibold text-slate-800 dark:text-emerald-400 bg-slate-100 dark:bg-slate-900/90 p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 text-center">
                     ${window.location.hostname}
                 </div>
                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
                     <div class="bg-slate-50 dark:bg-darkcard/80 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder">
-                        <span class="text-slate-500 dark:text-slate-400 block text-[11px] mb-1">${isEn ? "Active Users" : "کاربران فعال"}</span>
+                        <span class="text-slate-600 dark:text-slate-300 block text-[11px] font-medium mb-1">${isEn ? "Active Users" : "کاربران فعال"}</span>
                         <span class="font-bold text-xs text-slate-800 dark:text-white">${masterUsersCount} ${isEn ? "Users" : "کاربر"}</span>
                     </div>
                     <div class="bg-slate-50 dark:bg-darkcard/80 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder">
-                        <span class="text-slate-500 dark:text-slate-400 block text-[11px] mb-1">${isEn ? "Today Usage" : "مصرف امروز"}</span>
+                        <span class="text-slate-600 dark:text-slate-300 block text-[11px] font-medium mb-1">${isEn ? "Today Usage" : "مصرف امروز"}</span>
                         <span class="font-bold text-xs text-slate-800 dark:text-white">${formatGB(masterTodayBytes)}</span>
                     </div>
                     <div class="bg-slate-50 dark:bg-darkcard/80 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder">
-                        <span class="text-slate-500 dark:text-slate-400 block text-[11px] mb-1">${isEn ? "Total Usage" : "مصرف کل"}</span>
+                        <span class="text-slate-600 dark:text-slate-300 block text-[11px] font-medium mb-1">${isEn ? "Total Usage" : "مصرف کل"}</span>
                         <span class="font-bold text-xs text-primary font-mono">${formatGB(masterTotalBytes)}</span>
                     </div>
                     <div class="bg-slate-50 dark:bg-darkcard/80 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder">
-                        <span class="text-slate-500 dark:text-slate-400 block text-[11px] mb-1">${isEn ? "Daily Requests" : "درخواست امروز"}</span>
+                        <span class="text-slate-600 dark:text-slate-300 block text-[11px] font-medium mb-1">${isEn ? "Daily Requests" : "درخواست امروز"}</span>
                         <span class="font-bold text-xs font-mono text-slate-800 dark:text-white">${(window.clusterMasterDailyReqs || 0).toLocaleString("fa-IR")}</span>
                     </div>
                 </div>
@@ -5578,19 +5592,19 @@ function buildModeCheckboxes(wrapId, userMode) {
 
                         <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
                             <div class="bg-slate-50 dark:bg-darkcard/80 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder">
-                                <span class="text-slate-500 dark:text-slate-400 block text-[11px] mb-1">کاربران مجاز</span>
+                                <span class="text-slate-600 dark:text-slate-300 block text-[11px] font-medium mb-1">کاربران مجاز</span>
                                 <span class="font-bold text-xs text-slate-800 dark:text-white">${nodeUsers}</span>
                             </div>
                             <div class="bg-slate-50 dark:bg-darkcard/80 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder">
-                                <span class="text-slate-500 dark:text-slate-400 block text-[11px] mb-1">${isEn ? "Today Usage" : "مصرف امروز"}</span>
+                                <span class="text-slate-600 dark:text-slate-300 block text-[11px] font-medium mb-1">${isEn ? "Today Usage" : "مصرف امروز"}</span>
                                 <span class="font-bold text-xs text-slate-800 dark:text-white">${formatGB(nodeTodayBytes)}</span>
                             </div>
                             <div class="bg-slate-50 dark:bg-darkcard/80 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder">
-                                <span class="text-slate-500 dark:text-slate-400 block text-[11px] mb-1">${isEn ? "Total Usage" : "مصرف کل"}</span>
+                                <span class="text-slate-600 dark:text-slate-300 block text-[11px] font-medium mb-1">${isEn ? "Total Usage" : "مصرف کل"}</span>
                                 <span class="font-bold text-xs text-primary font-mono">${formatGB(nodeTotalBytes)}</span>
                             </div>
                             <div class="bg-slate-50 dark:bg-darkcard/80 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder">
-                                <span class="text-slate-500 dark:text-slate-400 block text-[11px] mb-1">${isEn ? "Daily Requests" : "درخواست امروز"}</span>
+                                <span class="text-slate-600 dark:text-slate-300 block text-[11px] font-medium mb-1">${isEn ? "Daily Requests" : "درخواست امروز"}</span>
                                 <span class="font-bold text-xs font-mono text-slate-800 dark:text-white">${Number(dailyReqs).toLocaleString("fa-IR")}</span>
                             </div>
                         </div>

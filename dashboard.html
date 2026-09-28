@@ -2944,7 +2944,7 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                   }
               } catch(e){}
               try { renderUsersTable(); } catch(e){}
-              try { renderLinkedNodes(); if(typeof renderTabNodes === "function") renderTabNodes(); if(typeof showToast === "function") showToast("ورکر فرعی با موفقیت اضافه شد", "success"); } catch(e){}
+              try { renderLinkedNodes(); if(typeof renderTabNodes === "function") renderTabNodes();  } catch(e){}
               try { renderFakeConfigs(window._fakeConfigs); } catch(e){}
           }
           applyLang();
@@ -3306,14 +3306,14 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
               closeAddNodeModal();
               document.getElementById('add-node-url').value = '';
               document.getElementById('add-node-apikey').value = '';
-              renderLinkedNodes(); if(typeof renderTabNodes === "function") renderTabNodes(); if(typeof showToast === "function") showToast("ورکر فرعی با موفقیت اضافه شد", "success");
+              renderLinkedNodes(); if(typeof renderTabNodes === "function") renderTabNodes(); 
               doSaveDirectly();
           }
 
           function removeLinkedNode(idx) {
               if (!window.nahanConfig || !Array.isArray(window.nahanConfig.linkedPanels)) return;
               window.nahanConfig.linkedPanels.splice(idx, 1);
-              renderLinkedNodes(); if(typeof renderTabNodes === "function") renderTabNodes(); if(typeof showToast === "function") showToast("ورکر فرعی با موفقیت اضافه شد", "success");
+              renderLinkedNodes(); if(typeof renderTabNodes === "function") renderTabNodes(); 
           }
 
           
@@ -3345,7 +3345,7 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                       window.clusterNodeStats.nodes[p.url] = { online: false, latency: 0, totalBytes: 0 };
                   }
               }));
-              try { renderLinkedNodes(); if(typeof renderTabNodes === "function") renderTabNodes(); if(typeof showToast === "function") showToast("ورکر فرعی با موفقیت اضافه شد", "success"); } catch(e){}
+              try { renderLinkedNodes(); if(typeof renderTabNodes === "function") renderTabNodes();  } catch(e){}
           }
 
           function renderLinkedNodes() {
@@ -3544,7 +3544,7 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                       if (conf.linkedPanels) {
                           if (!window.nahanConfig) window.nahanConfig = {};
                           window.nahanConfig.linkedPanels = conf.linkedPanels;
-                          renderLinkedNodes(); if(typeof renderTabNodes === "function") renderTabNodes(); if(typeof showToast === "function") showToast("ورکر فرعی با موفقیت اضافه شد", "success");
+                          renderLinkedNodes(); if(typeof renderTabNodes === "function") renderTabNodes(); 
                       }
 
                       updateUI();
@@ -3700,7 +3700,7 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                       window.nahanLiveUsage = data.usage || {};
                       window.nahanProfiles = data.profiles || [];
                       renderUsersTable();
-                      renderLinkedNodes(); if(typeof renderTabNodes === "function") renderTabNodes(); if(typeof showToast === "function") showToast("ورکر فرعی با موفقیت اضافه شد", "success");
+                      renderLinkedNodes(); if(typeof renderTabNodes === "function") renderTabNodes(); 
                       try { checkUpdate(); } catch(ue) { console.error(ue); }
                        if (!silent) switchTab('overview');
 
@@ -5478,7 +5478,7 @@ function buildModeCheckboxes(wrapId, userMode) {
         const panels = Array.isArray(cfg.linkedPanels) ? cfg.linkedPanels : [];
         const users = Array.isArray(cfg.users) ? cfg.users : [];
         const stats = window.clusterNodeStats?.nodes || {};
-        const totalNodes = panels.length + 1;
+        const totalNodes = panels.length;
 
         if (badge) {
             badge.innerText = isEn ? `Active Cluster Network: ${totalNodes} Workers | Capacity: ${(totalNodes * 100).toLocaleString("en-US")}k Requests` : `شبکه فعال کلاستر: ${totalNodes} ورکر | ظرفیت: ${(totalNodes * 100).toLocaleString("fa-IR")} هزار درخواست`;

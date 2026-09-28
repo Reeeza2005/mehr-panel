@@ -4872,7 +4872,7 @@ function buildModeCheckboxes(wrapId, userMode) {
                   if(res.ok) {
                        const stat = document.getElementById('save-status');
                        if (stat) stat.textContent = i18n[lang]?.msg_saved || "Saved!";
-                       setTimeout(() => { doLogin(true); if (stat) stat.textContent = ""; }, 1000);
+                       try { localStorage.setItem("nahan_cached_config", JSON.stringify(window.nahanConfig)); } catch(_) {}; setTimeout(() => { if (stat) stat.textContent = ""; }, 1500);
                   }
               } catch(e) {}
               if (btn) btn.innerText = origText;

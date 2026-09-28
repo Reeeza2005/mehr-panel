@@ -392,7 +392,7 @@ html.dark select option {
                   </button>
                                       <button onclick="switchTab('servers')" id="tab-servers" class="nav-item flex items-center w-full px-4 py-3 rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-white group">
                         <svg class="w-6 h-6 me-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"></path></svg>
-                        <span class="font-semibold">سرورها</span>
+                        <span class="font-semibold" data-i18n="tab_servers">Servers</span>
                     </button>
                     <button onclick="switchTab('advanced')" id="tab-advanced" class="nav-item flex items-center w-full px-4 py-3 rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-white group">
                       <svg class="w-6 h-6 me-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
@@ -921,17 +921,17 @@ html.dark select option {
                 <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[var(--color-surface)] p-4 rounded-2xl border border-slate-200 dark:border-darkborder shadow-sm">
                     <div>
                         <h2 class="text-base font-bold text-slate-800 dark:text-white flex items-center gap-2">
-                            <span>مدیریت سرورها و نودهای کلاستر</span>
+                            <span data-i18n="t4_servers_title">مدیریت سرورها و نودهای کلاستر</span>
                         </h2>
-                        <p id="tab-cluster-capacity-badge" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">در حال بارگذاری وضعیت کلاستر...</p>
+                        <p id="tab-cluster-capacity-badge" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5" data-i18n="t4_cluster_loading">در حال بارگذاری وضعیت کلاستر...</p>
                     </div>
                     <div class="flex items-center gap-2">
                         <button onclick="if(typeof renderTabNodes==='function')renderTabNodes();showToast('داده‌ها به‌روزرسانی شدند','success')" class="px-3 py-2 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-darkborder transition flex items-center gap-1.5 shadow-sm">
-                            <span>🔄 به‌روزرسانی وضعیت</span>
+                            <span data-i18n="t4_btn_refresh">🔄 به‌روزرسانی وضعیت</span>
                         </button>
                         <button onclick="showAddNodeModal()" type="button" class="px-4 py-2 text-xs font-bold rounded-xl bg-primary text-white hover:opacity-90 transition flex items-center gap-1.5 shadow-sm shadow-primary/20">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
-                            <span>افزودن نود جدید</span>
+                            <span data-i18n="t4_btn_add_node">افزودن نود جدید</span>
                         </button>
                     </div>
                 </div>
@@ -1493,8 +1493,8 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                                        <button type="button" onclick="toggleAddUserSection('smart')" class="w-full flex items-center justify-between p-4 hover:bg-slate-100/50 dark:hover:bg-slate-700/30 transition-colors">
                                            <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
                                                <span class="w-5 h-5 flex items-center justify-center rounded bg-indigo-500/10 text-indigo-500 text-[10px] font-bold">5</span>
-                                               <span class="smart-title-text font-bold text-sm">روتر هوشمند مِهر</span>
-                                               <span class="text-[10px] font-normal text-slate-400">(فیلترهای کاربر)</span>
+                                               <span class="e-text font-bold text-sm" data-i18n="sr_tab_btn">روتر هوشمند</span>
+                                                <span class="text-[10px] font-normal text-slate-400" data-i18n="sr_user_filters">(فیلترهای کاربر)</span>
                                            </h4>
                                            <svg id="add-smart-arrow" class="w-4 h-4 text-slate-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                                        </button>
@@ -1504,73 +1504,73 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                                                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                                    <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder bg-transparent cursor-pointer select-none">
                                                        <input type="checkbox" id="user-block-telegram" class="w-4 h-4 rounded border-slate-300 dark:border-slate-600 bg-transparent text-primary focus:ring-0">
-                                                       <span class="text-xs font-semibold smart-label-text">تلگرام</span>
+                                                       <span class="text-xs font-semibold smart-label-text" data-i18n="sr_tg">تلگرام</span>
                                                    </label>
                                                    <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder bg-transparent cursor-pointer select-none">
                                                        <input type="checkbox" id="user-block-instagram" class="w-4 h-4 rounded border-slate-300 dark:border-slate-600 bg-transparent text-primary focus:ring-0">
-                                                       <span class="text-xs font-semibold smart-label-text">اینستاگرام</span>
+                                                       <span class="text-xs font-semibold smart-label-text" data-i18n="sr_ig">اینستاگرام</span>
                                                    </label>
                                                    <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder bg-transparent cursor-pointer select-none">
                                                        <input type="checkbox" id="user-block-twitter" class="w-4 h-4 rounded border-slate-300 dark:border-slate-600 bg-transparent text-primary focus:ring-0">
-                                                       <span class="text-xs font-semibold smart-label-text">توییتر (X)</span>
+                                                       <span class="text-xs font-semibold smart-label-text" data-i18n="sr_x">توییتر (X)</span>
                                                    </label>
                                                    <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder bg-transparent cursor-pointer select-none">
                                                        <input type="checkbox" id="user-block-whatsapp" class="w-4 h-4 rounded border-slate-300 dark:border-slate-600 bg-transparent text-primary focus:ring-0">
-                                                       <span class="text-xs font-semibold smart-label-text">واتساپ</span>
+                                                       <span class="text-xs font-semibold smart-label-text" data-i18n="sr_wa">واتساپ</span>
                                                    </label>
                                                </div>
                                            </div>
 
                                            <div>
-                                               <label class="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-2">قوانین مسدودسازی (Block Rules)</label>
+                                               <label class="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-2" data-i18n="sr_block_rules_title">قوانین مسدودسازی (Block Rules)</label>
                                                <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
                                                    <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder bg-transparent cursor-pointer select-none">
                                                        <input type="checkbox" id="user-block-ads" class="w-4 h-4 rounded border-slate-300 dark:border-slate-600 bg-transparent text-primary focus:ring-0">
-                                                       <span class="text-xs font-semibold smart-label-text">Ads (تبلیغات)</span>
+                                                       <span class="text-xs font-semibold smart-label-text" data-i18n="sr_block_ads">Ads (تبلیغات)</span>
                                                    </label>
                                                    <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder bg-transparent cursor-pointer select-none">
                                                        <input type="checkbox" id="user-block-porn" class="w-4 h-4 rounded border-slate-300 dark:border-slate-600 bg-transparent text-primary focus:ring-0">
-                                                       <span class="text-xs font-semibold smart-label-text">Porn (غیراخلاقی)</span>
+                                                       <span class="text-xs font-semibold smart-label-text" data-i18n="sr_block_porn">Porn (غیراخلاقی)</span>
                                                    </label>
                                                    <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder bg-transparent cursor-pointer select-none">
                                                        <input type="checkbox" id="user-block-quic" class="w-4 h-4 rounded border-slate-300 dark:border-slate-600 bg-transparent text-primary focus:ring-0">
-                                                       <span class="text-xs font-semibold smart-label-text">QUIC Protocol</span>
+                                                       <span class="text-xs font-semibold smart-label-text" data-i18n="sr_block_quic">QUIC Protocol</span>
                                                    </label>
                                                    <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder bg-transparent cursor-pointer select-none">
                                                        <input type="checkbox" id="user-block-malware" class="w-4 h-4 rounded border-slate-300 dark:border-slate-600 bg-transparent text-primary focus:ring-0">
-                                                       <span class="text-xs font-semibold smart-label-text">Malware (بدافزار)</span>
+                                                       <span class="text-xs font-semibold smart-label-text" data-i18n="sr_block_malware">Malware (بدافزار)</span>
                                                    </label>
                                                    <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder bg-transparent cursor-pointer select-none">
                                                        <input type="checkbox" id="user-block-phishing" class="w-4 h-4 rounded border-slate-300 dark:border-slate-600 bg-transparent text-primary focus:ring-0">
-                                                       <span class="text-xs font-semibold smart-label-text">Phishing (فیشینگ)</span>
+                                                       <span class="text-xs font-semibold smart-label-text" data-i18n="sr_block_phishing">Phishing (فیشینگ)</span>
                                                    </label>
                                                    <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder bg-transparent cursor-pointer select-none">
                                                        <input type="checkbox" id="user-block-miner" class="w-4 h-4 rounded border-slate-300 dark:border-slate-600 bg-transparent text-primary focus:ring-0">
-                                                       <span class="text-xs font-semibold smart-label-text">Cryptominers</span>
+                                                       <span class="text-xs font-semibold smart-label-text" data-i18n="sr_block_miner">Cryptominers</span>
                                                    </label>
                                                </div>
                                            </div>
 
                                            <div>
-                                               <label class="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-2">قوانین عبور مستقیم (Bypass Rules)</label>
+                                               <label class="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-2" data-i18n="sr_bypass_rules_title">قوانین عبور مستقیم (Bypass Rules)</label>
                                                <div class="grid grid-cols-3 gap-2">
                                                    <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder bg-transparent cursor-pointer select-none">
                                                        <input type="checkbox" id="user-bypass-iran" checked class="w-4 h-4 rounded border-slate-300 dark:border-slate-600 bg-transparent text-primary focus:ring-0">
-                                                       <span class="text-xs font-semibold smart-label-text">ایران</span>
+                                                       <span class="text-xs font-semibold smart-label-text" data-i18n="sr_bypass_ir">ایران</span>
                                                    </label>
                                                    <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder bg-transparent cursor-pointer select-none">
                                                        <input type="checkbox" id="user-bypass-china" class="w-4 h-4 rounded border-slate-300 dark:border-slate-600 bg-transparent text-primary focus:ring-0">
-                                                       <span class="text-xs font-semibold smart-label-text">چین</span>
+                                                       <span class="text-xs font-semibold smart-label-text" data-i18n="sr_bypass_cn">چین</span>
                                                    </label>
                                                    <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder bg-transparent cursor-pointer select-none">
                                                        <input type="checkbox" id="user-bypass-russia" class="w-4 h-4 rounded border-slate-300 dark:border-slate-600 bg-transparent text-primary focus:ring-0">
-                                                       <span class="text-xs font-semibold smart-label-text">روسیه</span>
+                                                       <span class="text-xs font-semibold smart-label-text" data-i18n="sr_bypass_ru">روسیه</span>
                                                    </label>
                                                </div>
                                            </div>
 
                                            <div>
-                                               <label class="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-2">قوانین سفارشی (Custom Rules)</label>
+                                               <label class="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-2" data-i18n="sr_custom_rules_title">قوانین سفارشی (Custom Rules)</label>
                                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                                    <div>
                                                        <label class="block text-[10px] font-normal text-slate-400 mb-1">Block IPs - Domains</label>
@@ -1743,8 +1743,8 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                                         <button type="button" onclick="toggleEditUserSection('smart')" class="w-full flex items-center justify-between p-4 hover:bg-slate-100/50 dark:hover:bg-slate-700/30 transition-colors">
                                             <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
                                                 <span class="w-5 h-5 flex items-center justify-center rounded bg-indigo-500/10 text-indigo-500 text-[10px] font-bold">5</span>
-                                                <span class="smart-title-text font-bold text-sm">روتر هوشمند مِهر</span>
-                                                <span class="text-[10px] font-normal text-slate-400">(فیلترهای کاربر)</span>
+                                                <span class="e-text font-bold text-sm" data-i18n="sr_tab_btn">روتر هوشمند</span>
+                                                <span class="text-[10px] font-normal text-slate-400" data-i18n="sr_user_filters">(فیلترهای کاربر)</span>
                                             </h4>
                                             <svg id="edit-smart-arrow" class="w-4 h-4 text-slate-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                                         </button>
@@ -1754,55 +1754,55 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                                                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                                     <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder bg-transparent cursor-pointer select-none">
                                                         <input type="checkbox" id="edit-user-block-telegram" class="w-4 h-4 rounded border-slate-300 dark:border-slate-600 bg-transparent text-primary focus:ring-0">
-                                                        <span class="text-xs font-semibold smart-label-text">تلگرام</span>
+                                                        <span class="text-xs font-semibold smart-label-text" data-i18n="sr_tg">تلگرام</span>
                                                     </label>
                                                     <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder bg-transparent cursor-pointer select-none">
                                                         <input type="checkbox" id="edit-user-block-instagram" class="w-4 h-4 rounded border-slate-300 dark:border-slate-600 bg-transparent text-primary focus:ring-0">
-                                                        <span class="text-xs font-semibold smart-label-text">اینستاگرام</span>
+                                                        <span class="text-xs font-semibold smart-label-text" data-i18n="sr_ig">اینستاگرام</span>
                                                     </label>
                                                     <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder bg-transparent cursor-pointer select-none">
                                                         <input type="checkbox" id="edit-user-block-twitter" class="w-4 h-4 rounded border-slate-300 dark:border-slate-600 bg-transparent text-primary focus:ring-0">
-                                                        <span class="text-xs font-semibold smart-label-text">توییتر (X)</span>
+                                                        <span class="text-xs font-semibold smart-label-text" data-i18n="sr_x">توییتر (X)</span>
                                                     </label>
                                                     <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder bg-transparent cursor-pointer select-none">
                                                         <input type="checkbox" id="edit-user-block-whatsapp" class="w-4 h-4 rounded border-slate-300 dark:border-slate-600 bg-transparent text-primary focus:ring-0">
-                                                        <span class="text-xs font-semibold smart-label-text">واتساپ</span>
+                                                        <span class="text-xs font-semibold smart-label-text" data-i18n="sr_wa">واتساپ</span>
                                                     </label>
                                                 </div>
                                             </div>
 
                                             <div>
-                                                <label class="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-2">قوانین مسدودسازی (Block Rules)</label>
+                                                <label class="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-2" data-i18n="sr_block_rules_title">قوانین مسدودسازی (Block Rules)</label>
                                                 <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
                                                     <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder bg-transparent cursor-pointer select-none">
                                                         <input type="checkbox" id="edit-user-block-ads" class="w-4 h-4 rounded border-slate-300 dark:border-slate-600 bg-transparent text-primary focus:ring-0">
-                                                        <span class="text-xs font-semibold smart-label-text">Ads (تبلیغات)</span>
+                                                        <span class="text-xs font-semibold smart-label-text" data-i18n="sr_block_ads">Ads (تبلیغات)</span>
                                                     </label>
                                                     <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder bg-transparent cursor-pointer select-none">
                                                         <input type="checkbox" id="edit-user-block-porn" class="w-4 h-4 rounded border-slate-300 dark:border-slate-600 bg-transparent text-primary focus:ring-0">
-                                                        <span class="text-xs font-semibold smart-label-text">Porn (غیراخلاقی)</span>
+                                                        <span class="text-xs font-semibold smart-label-text" data-i18n="sr_block_porn">Porn (غیراخلاقی)</span>
                                                     </label>
                                                     <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder bg-transparent cursor-pointer select-none">
                                                         <input type="checkbox" id="edit-user-block-quic" class="w-4 h-4 rounded border-slate-300 dark:border-slate-600 bg-transparent text-primary focus:ring-0">
-                                                        <span class="text-xs font-semibold smart-label-text">QUIC Protocol</span>
+                                                        <span class="text-xs font-semibold smart-label-text" data-i18n="sr_block_quic">QUIC Protocol</span>
                                                     </label>
                                                     <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder bg-transparent cursor-pointer select-none">
                                                         <input type="checkbox" id="edit-user-block-malware" class="w-4 h-4 rounded border-slate-300 dark:border-slate-600 bg-transparent text-primary focus:ring-0">
-                                                        <span class="text-xs font-semibold smart-label-text">Malware (بدافزار)</span>
+                                                        <span class="text-xs font-semibold smart-label-text" data-i18n="sr_block_malware">Malware (بدافزار)</span>
                                                     </label>
                                                     <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder bg-transparent cursor-pointer select-none">
                                                         <input type="checkbox" id="edit-user-block-phishing" class="w-4 h-4 rounded border-slate-300 dark:border-slate-600 bg-transparent text-primary focus:ring-0">
-                                                        <span class="text-xs font-semibold smart-label-text">Phishing (فیشینگ)</span>
+                                                        <span class="text-xs font-semibold smart-label-text" data-i18n="sr_block_phishing">Phishing (فیشینگ)</span>
                                                     </label>
                                                     <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder bg-transparent cursor-pointer select-none">
                                                         <input type="checkbox" id="edit-user-block-miner" class="w-4 h-4 rounded border-slate-300 dark:border-slate-600 bg-transparent text-primary focus:ring-0">
-                                                        <span class="text-xs font-semibold smart-label-text">Cryptominers</span>
+                                                        <span class="text-xs font-semibold smart-label-text" data-i18n="sr_block_miner">Cryptominers</span>
                                                     </label>
                                                 </div>
                                             </div>
 
                                             <div>
-                                                <label class="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-2">قوانین عبور مستقیم (Bypass Rules)</label>
+                                                <label class="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-2" data-i18n="sr_bypass_rules_title">قوانین عبور مستقیم (Bypass Rules)</label>
                                                 <div class="grid grid-cols-3 gap-2">
                                                     <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder bg-transparent cursor-pointer select-none">
                                                         <input type="checkbox" id="edit-user-bypass-iran" checked class="w-4 h-4 rounded border-slate-300 dark:border-slate-600 bg-transparent text-primary focus:ring-0">
@@ -1820,7 +1820,7 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                                             </div>
 
                                             <div>
-                                                <label class="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-2">قوانین سفارشی (Custom Rules)</label>
+                                                <label class="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-2" data-i18n="sr_custom_rules_title">قوانین سفارشی (Custom Rules)</label>
                                                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                                     <div>
                                                         <label class="block text-[10px] font-normal text-slate-400 mb-1">Block IPs - Domains</label>
@@ -2032,8 +2032,7 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
               </button>
                               <button onclick="switchTab('servers')" id="mob-tab-servers" class="mobile-tab-item mobile-nav-item flex flex-col items-center justify-center w-full h-full text-slate-400">
                     <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"></path></svg>
-                    <span class="text-[10px] font-bold">سرورها</span>
-                </button>
+                        <span class="text-[10px]" data-i18n="tab_servers">سرورها</span></button>
                 <button onclick="switchTab('advanced')" id="mob-tab-advanced" class="mobile-tab-item mobile-nav-item flex flex-col items-center justify-center w-full h-full text-slate-400">
                   <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
                   <span class="text-[10px] font-bold" data-i18n="tab_adv">Advanced</span>
@@ -2229,6 +2228,45 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
           const CURRENT_VERSION = "3.0.3";
           const i18n = {
               en: {
+                  tab_servers: "Servers",
+                  sr_tab_btn: "Smart Router",
+                  sr_user_filters: "(User Filters)",
+                  t4_servers_title: "Cluster Nodes & Servers Management",
+                  t4_cluster_loading: "Loading cluster status...",
+                  t4_btn_refresh: "🔄 Refresh Status",
+                  t4_btn_add_node: "Add New Node",
+                  t4_master_worker: "Main Master Worker (Control Plane & DB)",
+                  t4_online: "Online",
+                  t4_role: "Cluster Role",
+                  t4_role_val: "Control Plane (Management)",
+                  t4_traffic: "Proxy Traffic",
+                  t4_traffic_val: "Disabled (Security)",
+                  t4_db: "Database / D1",
+                  t4_db_val: "Connected & Active",
+                  t4_host_desc: "Central Control Panel Host",
+                  t4_stable: "Stable",
+
+                  tab_smart_router: "Smart Router",
+                  t7_title: "Smart Router",
+                  tab_servers: "Servers",
+
+                  sr_tg: "Telegram",
+                  sr_ig: "Instagram",
+                  sr_x: "Twitter (X)",
+                  sr_wa: "WhatsApp",
+                  sr_block_rules_title: "Block Rules",
+                  sr_block_ads: "Ads & Trackers",
+                  sr_block_porn: "Adult Content (Porn)",
+                  sr_block_quic: "QUIC Protocol",
+                  sr_block_malware: "Malware Protection",
+                  sr_block_phishing: "Phishing Protection",
+                  sr_block_miner: "Crypto Miners",
+                  sr_bypass_rules_title: "Bypass Rules",
+                  sr_bypass_ir: "Iran",
+                  sr_bypass_cn: "China",
+                  sr_bypass_ru: "Russia",
+                  sr_custom_rules_title: "Custom Rules",
+
                   title: "Mehr Gateway", pass_ph: "Master Key", login_btn: "Authenticate", err_pass: "Access Denied", missing_db: "⚠️ IOT_DB namespace missing! Settings won't save.", system_online: "System online",
                   logout: "Disconnect", tab_overview: "Dashboard", tab_info: "Endpoints", tab_status: "Metrics", tab_settings: "System", tab_adv: "Advanced", tab_logs: "Logs", tab_help: "Help & FAQ",
                   qr_title: "Direct Stream Link", badge_multi: "Dual-Core Multiplexed", copy: "Copy", copied: "Copied to clipboard!", sync_link: "Cloud Sync URL", active_id: "Hardware ID",
@@ -2330,6 +2368,45 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                     html_desc_strategy: "<details><summary class='cursor-pointer text-primary'>View supported placeholders...</summary><div class='mt-2'>Supported placeholders: <code class='bg-slate-100 dark:bg-slate-800/80 px-1 py-0.5 rounded text-rose-500 font-mono'>{FLAG}</code>, <code class='bg-slate-100 dark:bg-slate-800/80 px-1 py-0.5 rounded text-rose-500 font-mono'>{COUNTRY}</code>, <code class='bg-slate-100 dark:bg-slate-800/80 px-1 py-0.5 rounded text-rose-500 font-mono'>{CITY}</code>, <code class='bg-slate-100 dark:bg-slate-800/80 px-1 py-0.5 rounded text-rose-500 font-mono'>{ISP}</code>, <code class='bg-slate-100 dark:bg-slate-800/80 px-1 py-0.5 rounded text-rose-500 font-mono'>{PROTOCOL}</code>, <code class='bg-slate-100 dark:bg-slate-800/80 px-1 py-0.5 rounded text-rose-500 font-mono'>{USER}</code>, <code class='bg-slate-100 dark:bg-slate-800/80 px-1 py-0.5 rounded text-rose-500 font-mono'>{PORT}</code>, <code class='bg-slate-100 dark:bg-slate-800/80 px-1 py-0.5 rounded text-rose-500 font-mono'>{PREFIX}</code>, <code class='bg-slate-100 dark:bg-slate-800/80 px-1 py-0.5 rounded text-rose-500 font-mono'>{IP}</code>, <code class='bg-slate-100 dark:bg-slate-800/80 px-1 py-0.5 rounded text-rose-500 font-mono'>{IP_NAME}</code>, <code class='bg-slate-100 dark:bg-slate-800/80 px-1 py-0.5 rounded text-rose-500 font-mono'>{HOST}</code>, <code class='bg-slate-100 dark:bg-slate-800/80 px-1 py-0.5 rounded text-rose-500 font-mono'>{DATE}</code>, <code class='bg-slate-100 dark:bg-slate-800/80 px-1 py-0.5 rounded text-rose-500 font-mono'>{INDEX}</code>, <code class='bg-slate-100 dark:bg-slate-800/80 px-1 py-0.5 rounded text-rose-500 font-mono'>{WORKER}</code>.<br><span class='text-[10px] text-slate-400 dark:text-slate-500 leading-snug'>• <b>{FLAG}</b>: Country flag emoji (e.g. 🇺🇸).<br>• <b>{COUNTRY}</b>: Country name.<br>• <b>{CITY}</b>: City name.<br>• <b>{ISP}</b>: ISP / ASN org.<br>• <b>{PROTOCOL}</b>: Core mode (VLESS / Trojan).<br>• <b>{USER}</b>: Subscriber name.<br>• <b>{PORT}</b>: Active port.<br>• <b>{PREFIX}</b>: Custom prefix.<br>• <b>{IP}</b>: Clean IP address.<br>• <b>{IP_NAME}</b>: Clean IP name.<br>• <b>{HOST}</b>: Hostname.<br>• <b>{DATE}</b>: Current date.<br>• <b>{INDEX}</b>: Config index.<br>• <b>{WORKER}</b>: Worker name.</span><br>Pre-defined strategies: <code>default</code>, <code>type-user-port</code>, <code>user-port</code>, <code>host-port-user</code>, <code>prefix-user-port</code>, <code>ip</code>.</div></details>",
                },
               fa: {
+                  tab_servers: "سرورها",
+                  sr_tab_btn: "روتر هوشمند",
+                  sr_user_filters: "(فیلترهای کاربر)",
+                  t4_servers_title: "مدیریت سرورها و نودهای کلاستر",
+                  t4_cluster_loading: "در حال بارگذاری وضعیت کلاستر...",
+                  t4_btn_refresh: "🔄 به‌روزرسانی وضعیت",
+                  t4_btn_add_node: "افزودن نود جدید",
+                  t4_master_worker: "ورکر اصلی (کنترل پنل و دیتابیس)",
+                  t4_online: "آنلاین",
+                  t4_role: "نقش در کلاستر",
+                  t4_role_val: "Control Plane (مدیریت)",
+                  t4_traffic: "ترافیک عبوری",
+                  t4_traffic_val: "غیرفعال (امنیت پنل)",
+                  t4_db: "بانک اطلاعاتی / D1",
+                  t4_db_val: "متصل و فعال",
+                  t4_host_desc: "میزبان کنترل پنل مرکزی",
+                  t4_stable: "پایدار",
+
+                  tab_smart_router: "<span data-i18n=\"tab_smart_router\"><span data-i18n=\"tab_smart_router\">روتر هوشمند</span></span>",
+                  t7_title: "روتر هوشمند",
+                  tab_servers: "سرورها",
+
+                  sr_tg: "تلگرام",
+                  sr_ig: "اینستاگرام",
+                  sr_x: "توییتر (X)",
+                  sr_wa: "واتساپ",
+                  sr_block_rules_title: "قوانین مسدودسازی (Block Rules)",
+                  sr_block_ads: "Ads (تبلیغات)",
+                  sr_block_porn: "Porn (غیراخلاقی)",
+                  sr_block_quic: "QUIC Protocol",
+                  sr_block_malware: "Malware (بدافزار)",
+                  sr_block_phishing: "Phishing (فیشینگ)",
+                  sr_block_miner: "Cryptominers",
+                  sr_bypass_rules_title: "قوانین عبور مستقیم (Bypass Rules)",
+                  sr_bypass_ir: "ایران",
+                  sr_bypass_cn: "چین",
+                  sr_bypass_ru: "روسیه",
+                  sr_custom_rules_title: "قوانین سفارشی (Custom Rules)",
+
                   title: "دروازه مِهر", pass_ph: "کلید اصلی", login_btn: "ورود به سیستم", err_pass: "دسترسی مسدود شد", missing_db: "⚠️ فضای پایگاه داده یافت نشد! تنظیمات ذخیره نمی‌شوند.", system_online: "سیستم فعال است",
                   logout: "خروج", tab_overview: "نمای کلی", tab_info: "نودها", tab_status: "شبکه", tab_settings: "تنظیمات", tab_adv: "پیشرفته", tab_logs: "گزارش فعالیت", tab_help: "راهنما و سوالات",
                   qr_title: "لینک اتصال مستقیم", badge_multi: "ترکیب ترانزیت پیشرفته دوگانه", copy: "کپی", copied: "در حافظه کپی شد!", sync_link: "لینک ساب (همگام سازی ابری)", active_id: "شناسه سخت‌افزار",
@@ -2830,7 +2907,8 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                   if (i18n[lang] && i18n[lang][key] !== undefined && i18n[lang][key] !== null) {
                       if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
                           el.placeholder = i18n[lang][key];
-                      } else {
+                          if (typeof window.renderTabNodes === 'function') window.renderTabNodes();
+} else {
                           if (key.startsWith('html_') || /<[a-z][\s\S]*>/i.test(i18n[lang][key])) {
                               el.innerHTML = i18n[lang][key];
                           } else {
@@ -2921,6 +2999,9 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                   const deskBtn = document.getElementById('tab-'+t);
                   const mobBtn = document.getElementById('mob-tab-'+t);
                   if (tab === t) {
+                      if (t === 'servers' && typeof window.renderTabNodes === 'function') {
+                          window.renderTabNodes();
+                      }
                       view.classList.remove('hidden'); view.classList.add('block', 'fade-in');
                       if(deskBtn) deskBtn.classList.add('active');
                       if(mobBtn) mobBtn.classList.add('active');
@@ -5388,6 +5469,7 @@ function buildModeCheckboxes(wrapId, userMode) {
     };
 
     window.renderTabNodes = function () {
+        const isEn = (localStorage.getItem("nahan_lang") === "en" || document.documentElement.lang === "en");
         const grid = document.getElementById("tab-nodes-grid");
         const badge = document.getElementById("tab-cluster-capacity-badge");
         if (!grid) return;
@@ -5399,7 +5481,7 @@ function buildModeCheckboxes(wrapId, userMode) {
         const totalNodes = panels.length + 1;
 
         if (badge) {
-            badge.innerText = `شبکه فعال کلاستر: ${totalNodes} ورکر | ظرفیت: ${(totalNodes * 100).toLocaleString("fa-IR")} هزار درخواست`;
+            badge.innerText = isEn ? `Active Cluster Network: ${totalNodes} Workers | Capacity: ${(totalNodes * 100).toLocaleString("en-US")}k Requests` : `شبکه فعال کلاستر: ${totalNodes} ورکر | ظرفیت: ${(totalNodes * 100).toLocaleString("fa-IR")} هزار درخواست`;
         }
 
         let masterUsersCount = 0, masterTotalBytes = 0, masterTodayBytes = 0;
@@ -5418,34 +5500,34 @@ function buildModeCheckboxes(wrapId, userMode) {
                 <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-darkborder/60">
                     <div class="flex items-center gap-2">
                         <span class="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></span>
-                        <h3 class="text-sm font-black text-slate-800 dark:text-white">ورکر اصلی (کنترل پنل و دیتابیس)</h3>
+                        <h3 class="text-sm font-black text-slate-800 dark:text-white">${isEn ? "Main Master Worker (Control Plane & DB)" : "ورکر اصلی (کنترل پنل و دیتابیس)"}</h3>
                     </div>
-                    <span class="px-2.5 py-1 text-xs font-bold rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">آنلاین</span>
+                    <span class="px-2.5 py-1 text-xs font-bold rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">${isEn ? "Online" : "آنلاین"}</span>
                 </div>
                 <div class="text-xs font-mono text-slate-700 dark:text-slate-200 bg-slate-50 dark:bg-darkcard/80 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder text-center">
                     ${window.location.hostname}
                 </div>
                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
                     <div class="bg-slate-50 dark:bg-darkcard/80 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder">
-                        <span class="text-slate-500 dark:text-slate-400 block text-[11px] mb-1">کاربران فعال</span>
-                        <span class="font-bold text-xs text-slate-800 dark:text-white">${masterUsersCount} کاربر</span>
+                        <span class="text-slate-500 dark:text-slate-400 block text-[11px] mb-1">${isEn ? "Active Users" : "کاربران فعال"}</span>
+                        <span class="font-bold text-xs text-slate-800 dark:text-white">${masterUsersCount} ${isEn ? "Users" : "کاربر"}</span>
                     </div>
                     <div class="bg-slate-50 dark:bg-darkcard/80 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder">
-                        <span class="text-slate-500 dark:text-slate-400 block text-[11px] mb-1">مصرف امروز</span>
+                        <span class="text-slate-500 dark:text-slate-400 block text-[11px] mb-1">${isEn ? "Today Usage" : "مصرف امروز"}</span>
                         <span class="font-bold text-xs text-slate-800 dark:text-white">${formatGB(masterTodayBytes)}</span>
                     </div>
                     <div class="bg-slate-50 dark:bg-darkcard/80 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder">
-                        <span class="text-slate-500 dark:text-slate-400 block text-[11px] mb-1">مصرف کل</span>
+                        <span class="text-slate-500 dark:text-slate-400 block text-[11px] mb-1">${isEn ? "Total Usage" : "مصرف کل"}</span>
                         <span class="font-bold text-xs text-primary font-mono">${formatGB(masterTotalBytes)}</span>
                     </div>
                     <div class="bg-slate-50 dark:bg-darkcard/80 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder">
-                        <span class="text-slate-500 dark:text-slate-400 block text-[11px] mb-1">درخواست امروز</span>
+                        <span class="text-slate-500 dark:text-slate-400 block text-[11px] mb-1">${isEn ? "Daily Requests" : "درخواست امروز"}</span>
                         <span class="font-bold text-xs font-mono text-slate-800 dark:text-white">${(window.clusterMasterDailyReqs || 0).toLocaleString("fa-IR")}</span>
                     </div>
                 </div>
                 <div class="pt-1 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-                    <span>میزبان کنترل پنل مرکزی</span>
-                    <span class="text-emerald-500 dark:text-emerald-400 font-semibold">پایدار</span>
+                    <span>${isEn ? "Central Control Panel Host" : "میزبان کنترل پنل مرکزی"}</span>
+                    <span class="text-emerald-500 dark:text-emerald-400 font-semibold">${isEn ? "Stable" : "پایدار"}</span>
                 </div>
             </div>
         `;
@@ -5500,15 +5582,15 @@ function buildModeCheckboxes(wrapId, userMode) {
                                 <span class="font-bold text-xs text-slate-800 dark:text-white">${nodeUsers}</span>
                             </div>
                             <div class="bg-slate-50 dark:bg-darkcard/80 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder">
-                                <span class="text-slate-500 dark:text-slate-400 block text-[11px] mb-1">مصرف امروز</span>
+                                <span class="text-slate-500 dark:text-slate-400 block text-[11px] mb-1">${isEn ? "Today Usage" : "مصرف امروز"}</span>
                                 <span class="font-bold text-xs text-slate-800 dark:text-white">${formatGB(nodeTodayBytes)}</span>
                             </div>
                             <div class="bg-slate-50 dark:bg-darkcard/80 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder">
-                                <span class="text-slate-500 dark:text-slate-400 block text-[11px] mb-1">مصرف کل</span>
+                                <span class="text-slate-500 dark:text-slate-400 block text-[11px] mb-1">${isEn ? "Total Usage" : "مصرف کل"}</span>
                                 <span class="font-bold text-xs text-primary font-mono">${formatGB(nodeTotalBytes)}</span>
                             </div>
                             <div class="bg-slate-50 dark:bg-darkcard/80 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder">
-                                <span class="text-slate-500 dark:text-slate-400 block text-[11px] mb-1">درخواست امروز</span>
+                                <span class="text-slate-500 dark:text-slate-400 block text-[11px] mb-1">${isEn ? "Daily Requests" : "درخواست امروز"}</span>
                                 <span class="font-bold text-xs font-mono text-slate-800 dark:text-white">${Number(dailyReqs).toLocaleString("fa-IR")}</span>
                             </div>
                         </div>

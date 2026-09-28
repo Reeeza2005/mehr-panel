@@ -1,3 +1,51 @@
+// --- MEHR AGENT AUTH CACHE ---
+let cachedAllowedUsers = new Set();
+let cachedBlockedUsers = new Set();
+let lastSyncTime = 0;
+let pendingRequestsCount = 0;
+let detectedCountry = "";
+
+async function syncWithMaster(env, request) {
+    if (request && request.cf && request.cf.country) {
+        detectedCountry = request.cf.country;
+    }
+    const now = Date.now();
+    // اگر کمتر از ۳۰ ثانیه گذشته و هنوز ۱۰ درخواست در بافر جمع نشده، منتظر بمان
+    if ((now - lastSyncTime < 30000) && pendingRequestsCount < 10 && (cachedAllowedUsers.size > 0 || cachedBlockedUsers.size > 0)) return;
+    const reqsToSend = pendingRequestsCount > 0 ? pendingRequestsCount : 1;
+    const panelUrl = env.PANEL_URL || "https://mehr.reza5738m.workers.dev";
+    const clusterKey = env.CLUSTER_KEY || "mehr_cluster_secret_2026";
+    try {
+        const res = await fetch(`${panelUrl}/api/node/sync`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-Node-Key": clusterKey
+            },
+            body: JSON.stringify({
+                node_id: env.NODE_ID || "edge-node",
+                timestamp: now,
+                requests_count: reqsToSend,
+                country: detectedCountry || (request?.cf?.country) || ""
+            })
+        });
+        if (res.ok) {
+            pendingRequestsCount = 0;
+        }
+        if (res.ok) {
+            const data = await res.json();
+            if (data.allowed_uuids && Array.isArray(data.allowed_uuids)) {
+                cachedAllowedUsers = new Set(data.allowed_uuids.map(x => String(x).toLowerCase()));
+            }
+            if (data.blocked_uuids && Array.isArray(data.blocked_uuids)) {
+                cachedBlockedUsers = new Set(data.blocked_uuids.map(x => String(x).toLowerCase()));
+            }
+            lastSyncTime = now;
+            pendingRequestsCount = Math.max(0, pendingRequestsCount - reqsToSend);
+        }
+    } catch(e) {}
+}
+
 import { connect } from "cloudflare:sockets";
 import { createHash } from "node:crypto";
 
@@ -36,6 +84,10 @@ function parseVlessHeader(buffer) {
     if (buffer.byteLength < 24) throw new Error("Invalid VLESS header length");
     const version = new Uint8Array(buffer.slice(0, 1));
     const uuid = stringifyUUID(new Uint8Array(buffer.slice(1, 17)));
+    const cleanUuid = String(uuid).toLowerCase();
+    if (cachedBlockedUsers.has(cleanUuid) || (cachedAllowedUsers.size > 0 && !cachedAllowedUsers.has(cleanUuid))) {
+        throw new Error("Unauthorized user");
+    }
     const optLen = new Uint8Array(buffer.slice(17, 18))[0];
     const cmd = new Uint8Array(buffer.slice(18 + optLen, 18 + optLen + 1))[0];
     const isUDP = cmd === 2;
@@ -306,6 +358,8 @@ async function serveMaintenancePage(request, url) {
 
 export default {
     async fetch(request, env, ctx) {
+        pendingRequestsCount++;
+        ctx.waitUntil(syncWithMaster(env, request));
         const url = new URL(request.url);
         const path = url.pathname;
 

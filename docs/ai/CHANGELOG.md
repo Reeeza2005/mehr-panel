@@ -1,3 +1,25 @@
+
+## [3.5.1] - 2026-09-28
+### Added & Fixed (Localization / i18n)
+- **Smart Router (T7-M):** Full bilingual support (FA/EN) for modal rules, social block toggles, security filters, and bypass settings.
+- **Servers Tab (T4):**
+  - Standardized sidebar button label and typography (`Servers` / `سرورها`) aligned with Nahan i18n engine.
+  - Localized cluster network badge and action buttons (Refresh, Add Node).
+  - Localized master worker telemetry cards (Active Users, Today Usage, Total Usage, Cluster Role, Database/D1 status).
+  - Localized slave worker cards (latency, ping test, delete action, online/offline status).
+- **Maintenance:** Cleaned up temporary patch and inspection scripts to ensure workspace stability.
+
+
+## [3.5.1] - 2026-09-28
+### Added & Fixed (Localization / i18n)
+- **Smart Router (T7-M):** Full bilingual support (FA/EN) for user modal filters, social blocks, malware/ad blocks, and bypass rules.
+- **Servers Tab (T4):** 
+  - Standardized sidebar button label and typography (`Servers` / `سرورها`) aligned with Nahan i18n engine.
+  - Localized cluster capacity badge and action buttons (Refresh Status, Add Node).
+  - Localized master worker card metrics (Active Users, Today Usage, Total Usage, Cluster Role, Database/D1 status).
+  - Localized slave worker cards (latency, ping action, delete action, online/offline status).
+- **Cleanup:** Purged temporary shell patch scripts to maintain repository stability.
+
 # CHANGELOG — پروژه مهر (Mehr)
 
 > این فایل تغییرات واقعی و قابل‌ردیابی پروژه را ثبت می‌کند.

@@ -1,0 +1,7 @@
+.wrangler/
+*.bak*
+*.backup*
+.env
+node_modules/
+*.py
+wrangler.node*.toml

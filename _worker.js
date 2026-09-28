@@ -543,10 +543,10 @@ export default {
 
                                 if (isTls) {
                                     if (allowVless) {
-                                        vlessConfigs.push("vless://" + userUuid + "@" + ep.ip + ":" + port + "?encryption=none&security=tls&sni=" + target.host + "&host=" + target.host + "&type=ws&path=%2F" + target.path + pipQuery + "#" + encodeURIComponent(formatConfigName("vless", displayName, port, target.host, ep.ip, ++cfgIndex, sysConfig, (target.country || target.country || 'US'), !!(target.useUpstream || target.use_upstream))));
+                                        vlessConfigs.push("vless://" + userUuid + "@" + ep.ip + ":" + port + "?encryption=none&security=tls&sni=" + target.host + "&host=" + target.host + "&type=ws&path=%2F" + target.path + pipQuery + "#" + encodeURIComponent(formatConfigName("vless", displayName, port, target.host, ep.ip, ++cfgIndex, sysConfig, (target.country || target.country || 'US'), !!(target.useUpstream || target.use_upstream)) + smartLabelSuffix));
                                     }
                                     if (allowTrojan) {
-                                        vlessConfigs.push("trojan://" + userUuid + "@" + ep.ip + ":" + port + "?security=tls&sni=" + target.host + "&host=" + target.host + "&type=ws&path=%2Ftr" + pipQuery + "#" + encodeURIComponent(formatConfigName("trojan", displayName, port, target.host, ep.ip, ++cfgIndex, sysConfig, (target.country || target.country || 'US'), !!(target.useUpstream || target.use_upstream))));
+                                        vlessConfigs.push("trojan://" + userUuid + "@" + ep.ip + ":" + port + "?security=tls&sni=" + target.host + "&host=" + target.host + "&type=ws&path=%2Ftr" + pipQuery + "#" + encodeURIComponent(formatConfigName("trojan", displayName, port, target.host, ep.ip, ++cfgIndex, sysConfig, (target.country || target.country || 'US'), !!(target.useUpstream || target.use_upstream)) + smartLabelSuffix));
                                     }
                                 } else {
                                     if (allowVless) {

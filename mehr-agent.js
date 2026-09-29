@@ -3,6 +3,7 @@ let cachedAllowedUsers = new Set();
 let cachedBlockedUsers = new Set();
 let lastSyncTime = 0;
 let pendingRequestsCount = 0;
+let pendingUserTraffic = new Map(); // uuid -> { up: 0, down: 0 }
 let detectedCountry = "";
 
 async function syncWithMaster(env, request) {
@@ -16,19 +17,37 @@ async function syncWithMaster(env, request) {
     const panelUrl = env.PANEL_URL || "https://mehr.reza5738m.workers.dev";
     const clusterKey = env.CLUSTER_KEY || "mehr_cluster_secret_2026";
     try {
-        const res = await fetch(`${panelUrl}/api/node/sync`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-Node-Key": clusterKey
-            },
-            body: JSON.stringify({
-                node_id: env.NODE_ID || "edge-node",
-                timestamp: now,
-                requests_count: reqsToSend,
-                country: detectedCountry || (request?.cf?.country) || ""
-            })
-        });
+            const trafficSnapshot = [];
+            for (const [u, tr] of pendingUserTraffic.entries()) {
+                if (tr.up > 0 || tr.down > 0) {
+                    trafficSnapshot.push({ uuid: u, up: tr.up, down: tr.down });
+                }
+            }
+            const res = await fetch(`${panelUrl}/api/node/sync`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-Node-Key": clusterKey
+                },
+                body: JSON.stringify({
+                    node_id: env.NODE_ID || "edge-node",
+                    timestamp: now,
+                    requests_count: reqsToSend,
+                    country: detectedCountry || (request?.cf?.country) || "",
+                    user_traffic: trafficSnapshot
+                })
+            });
+            if (res.ok) {
+                // کسر مقادیر ارسال‌شده از بافر محلی نود
+                for (const item of trafficSnapshot) {
+                    const current = pendingUserTraffic.get(item.uuid);
+                    if (current) {
+                        current.up = Math.max(0, current.up - item.up);
+                        current.down = Math.max(0, current.down - item.down);
+                        if (current.up === 0 && current.down === 0) pendingUserTraffic.delete(item.uuid);
+                    }
+                }
+            }
         if (res.ok) {
             pendingRequestsCount = 0;
         }
@@ -165,7 +184,7 @@ function parseTrojanHeader(buffer, trPass) {
     return { port, address, rawData };
 }
 
-async function establishRemoteSocket(address, port, rawPayload, ws, responseHeader, proxyList) {
+async function establishRemoteSocket(address, port, rawPayload, ws, responseHeader, proxyList, userUuid = null) {
     let socket = null;
     let hasWritten = false;
 
@@ -198,6 +217,12 @@ async function establishRemoteSocket(address, port, rawPayload, ws, responseHead
         async write(chunk) {
             hasWritten = true;
             if (ws.readyState !== 1) return;
+            const sz = chunk.byteLength || chunk.length || 0;
+            if (userUuid && sz > 0) {
+                const uStat = pendingUserTraffic.get(userUuid) || { up: 0, down: 0 };
+                uStat.down += sz;
+                pendingUserTraffic.set(userUuid, uStat);
+            }
             if (responseHeader) {
                 ws.send(await new Blob([responseHeader, chunk]).arrayBuffer());
                 responseHeader = null;
@@ -241,9 +266,16 @@ function handleVlessWS(request, env) {
         }
     });
 
+    let currentUserUuid = null;
     const pipeSink = new WritableStream({
         async write(chunk) {
             if (remoteSocket) {
+                const sz = chunk.byteLength || chunk.length || 0;
+                if (currentUserUuid && sz > 0) {
+                    const uStat = pendingUserTraffic.get(currentUserUuid) || { up: 0, down: 0 };
+                    uStat.up += sz;
+                    pendingUserTraffic.set(currentUserUuid, uStat);
+                }
                 const writer = remoteSocket.writable.getWriter();
                 await writer.write(chunk);
                 writer.releaseLock();
@@ -252,13 +284,20 @@ function handleVlessWS(request, env) {
 
             const header = parseVlessHeader(chunk);
             const respHeader = new Uint8Array([header.version[0], 0]);
+            currentUserUuid = header.uuid;
+            if (header.rawData && header.rawData.byteLength > 0 && currentUserUuid) {
+                const uStat = pendingUserTraffic.get(currentUserUuid) || { up: 0, down: 0 };
+                uStat.up += header.rawData.byteLength;
+                pendingUserTraffic.set(currentUserUuid, uStat);
+            }
             remoteSocket = await establishRemoteSocket(
                 header.address,
                 header.port,
                 header.rawData,
                 serverWs,
                 respHeader,
-                DEFAULT_PROXY_IPS
+                DEFAULT_PROXY_IPS,
+                currentUserUuid
             );
         },
         close() {
@@ -295,9 +334,16 @@ function handleTrojanWS(request, env) {
         }
     });
 
+    let currentUserUuid = null;
     const pipeSink = new WritableStream({
         async write(chunk) {
             if (remoteSocket) {
+                const sz = chunk.byteLength || chunk.length || 0;
+                if (currentUserUuid && sz > 0) {
+                    const uStat = pendingUserTraffic.get(currentUserUuid) || { up: 0, down: 0 };
+                    uStat.up += sz;
+                    pendingUserTraffic.set(currentUserUuid, uStat);
+                }
                 const writer = remoteSocket.writable.getWriter();
                 await writer.write(chunk);
                 writer.releaseLock();

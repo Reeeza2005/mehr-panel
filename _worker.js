@@ -942,7 +942,7 @@ export default {
                     wsOk = false;
                 }
 
-                const ok = res.status < 400 && !isBlocked;
+                const ok = res.status < 400 && !isBlocked && wsOk;
 
                 // تشخیص دیتاسنتر و کشور سرور از روی هدرهای پاسخ کلادفلر نود
                 const cfRay = res.headers.get("cf-ray") || "";
@@ -1338,8 +1338,8 @@ export default {
                         const delta = (report.up || 0) + (report.down || 0);
                         if (delta > 0) {
                             await env.IOT_DB.prepare(
-                                "UPDATE users SET used_traffic = COALESCE(used_traffic, 0) + ?, traffic_used = COALESCE(traffic_used, 0) + ? WHERE uuid = ?"
-                            ).bind(delta, delta, report.uuid).run();
+                                "UPDATE users SET used_traffic = COALESCE(used_traffic, 0) + ? WHERE uuid = ?"
+                            ).bind(delta, report.uuid).run();
                         }
                     }
                 }

@@ -5,6 +5,6 @@ compatibility_flags = ["nodejs_compat"]
 workers_dev = true
 
 [vars]
-PANEL_URL = "https://mehr.reza5738m.workers.dev"
+PANEL_URL = "https://mehr.d3zjbexy9.workers.dev"
 CLUSTER_KEY = "mehr_cluster_secret_2026"
 NODE_ID = "node-1"

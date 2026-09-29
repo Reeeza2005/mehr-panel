@@ -14,7 +14,7 @@ async function syncWithMaster(env, request) {
     // اگر کمتر از ۳۰ ثانیه گذشته و هنوز ۱۰ درخواست در بافر جمع نشده، منتظر بمان
     if ((now - lastSyncTime < 30000) && pendingRequestsCount < 10 && (cachedAllowedUsers.size > 0 || cachedBlockedUsers.size > 0)) return;
     const reqsToSend = pendingRequestsCount > 0 ? pendingRequestsCount : 1;
-    const panelUrl = env.PANEL_URL || "https://mehr.reza5738m.workers.dev";
+    const panelUrl = env.PANEL_URL || "https://mehr.d3zjbexy9.workers.dev";
     const clusterKey = env.CLUSTER_KEY || "mehr_cluster_secret_2026";
     try {
             const trafficSnapshot = [];

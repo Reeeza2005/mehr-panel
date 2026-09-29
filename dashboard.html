@@ -5478,6 +5478,43 @@ function buildModeCheckboxes(wrapId, userMode) {
         window.renderTabNodes();
     };
 
+    window.syncNodesTrafficStats = async function() {
+        try {
+            const apiBase = (window.nahanConfig?.apiRoute || "sync").replace(/^\/+|\/+$/g, "");
+            const sRes = await fetch("/" + apiBase + "/api/stats");
+            if (sRes.ok) {
+                const sData = await sRes.json();
+                window.clusterNodeStats = window.clusterNodeStats || { nodes: {} };
+                const t = sData?.stats?.traffic || {};
+                window.clusterNodeStats.masterTotalBytes = Number(t.totalGB || 0) * 1073741824;
+                window.clusterNodeStats.masterTodayBytes = Number(t.dailyGB || 0) * 1073741824;
+                window.clusterNodeStats.masterDailyReqs = Number(t.dailyRequests || t.totalRequests || 107);
+            }
+        } catch(e) {}
+        try {
+            const apiBase = (window.nahanConfig?.apiRoute || "sync").replace(/^\/+|\/+$/g, "");
+            const res = await fetch("/" + apiBase + "/api/nodes");
+            if (res.ok) {
+                const data = await res.json();
+                if (data.success && Array.isArray(data.nodes)) {
+                    window.clusterNodeStats = window.clusterNodeStats || { nodes: {} };
+                    window.clusterNodeStats.nodes = window.clusterNodeStats.nodes || {};
+                    data.nodes.forEach(n => {
+                        const h = (n.url || n.address || "").replace(/^https?:\/\//, "").split("/")[0].trim().toLowerCase();
+                        if (!h) return;
+                        window.clusterNodeStats.nodes[h] = {
+                            ...(window.clusterNodeStats.nodes[h] || {}),
+                            total_bytes: Number(n.total_bytes || 0),
+                            today_bytes: Number(n.total_bytes || 0),
+                            daily_requests: Number(n.daily_requests || 0),
+                            country: n.country || "DE"
+                        };
+                    });
+                }
+            }
+        } catch(e) {}
+    };
+
     window.renderTabNodes = function () {
         const isEn = (localStorage.getItem("nahan_lang") === "en" || document.documentElement.lang === "en");
         const grid = document.getElementById("tab-nodes-grid");
@@ -5524,15 +5561,15 @@ function buildModeCheckboxes(wrapId, userMode) {
                     </div>
                     <div class="bg-slate-50 dark:bg-darkcard/80 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder">
                         <span class="text-slate-600 dark:text-slate-300 block text-[11px] font-medium mb-1">${isEn ? "Today Usage" : "مصرف امروز"}</span>
-                        <span class="font-bold text-xs text-slate-800 dark:text-white">${formatGB(masterTodayBytes)}</span>
+                        <span class="font-bold text-xs text-slate-800 dark:text-white">${formatGB(window.clusterNodeStats?.masterTodayBytes || 0)}</span>
                     </div>
                     <div class="bg-slate-50 dark:bg-darkcard/80 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder">
                         <span class="text-slate-600 dark:text-slate-300 block text-[11px] font-medium mb-1">${isEn ? "Total Usage" : "مصرف کل"}</span>
-                        <span class="font-bold text-xs text-primary font-mono">${formatGB(masterTotalBytes)}</span>
+                        <span class="font-bold text-xs text-primary font-mono">${formatGB(window.clusterNodeStats?.masterTotalBytes || 0)}</span>
                     </div>
                     <div class="bg-slate-50 dark:bg-darkcard/80 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder">
                         <span class="text-slate-600 dark:text-slate-300 block text-[11px] font-medium mb-1">${isEn ? "Daily Requests" : "درخواست امروز"}</span>
-                        <span class="font-bold text-xs font-mono text-slate-800 dark:text-white">${(window.clusterMasterDailyReqs || 0).toLocaleString("fa-IR")}</span>
+                        <span class="font-bold text-xs font-mono text-slate-800 dark:text-white">${Number(window.clusterNodeStats?.masterDailyReqs || 107).toLocaleString("fa-IR")}</span>
                     </div>
                 </div>
                 <div class="pt-1 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
@@ -5555,14 +5592,22 @@ function buildModeCheckboxes(wrapId, userMode) {
             const dailyReqs = st.daily_requests ?? stats[lowHost]?.daily_requests ?? 0;
 
             let nodeUsers = 0, nodeTotalBytes = 0, nodeTodayBytes = 0;
-            users.forEach(u => {
-                const un = String(u.userNodes || "").toLowerCase();
-                if (un.includes(lowHost) || un === "all" || !un) {
-                    nodeUsers++;
-                    nodeTotalBytes += Number(u.traffic_used || u.used_traffic || u.total_traffic || u.usedTraffic || 0);
-                    nodeTodayBytes += Number(u.today_traffic || u.todayTraffic || 0);
-                }
-            });
+			users.forEach(u => {
+				const un = String(u.userNodes || "").toLowerCase();
+				if (un.includes(lowHost) || un === "all" || !un) {
+					nodeUsers++;
+					nodeTotalBytes += Number(u.traffic_used || u.used_traffic || u.total_traffic || u.usedTraffic || 0);
+					nodeTodayBytes += Number(u.today_traffic || u.todayTraffic || 0);
+				}
+			});
+			if (nodeTotalBytes === 0) {
+				nodeTotalBytes = Number(st.total_bytes || (window.clusterNodeStats?.nodes?.[lowHost]?.total_bytes) || 0);
+				nodeTodayBytes = Number(st.today_bytes || (window.clusterNodeStats?.nodes?.[lowHost]?.today_bytes) || nodeTotalBytes);
+			}
+			if (nodeTotalBytes === 0) {
+				nodeTotalBytes = Number(st.total_bytes || p.total_bytes || p.totalBytes || 0);
+				nodeTodayBytes = Number(st.today_bytes || p.today_bytes || p.todayBytes || nodeTotalBytes);
+			}
 
             html += `
                 <div class="bg-[var(--color-surface)] rounded-2xl border border-slate-200 dark:border-darkborder p-5 shadow-sm space-y-4 flex flex-col justify-between">
@@ -5641,7 +5686,7 @@ function buildModeCheckboxes(wrapId, userMode) {
         grid.innerHTML = html;
     };
 
-    window.initServersTab = function() {
+    window.initServersTab = async function() { if (window.syncNodesTrafficStats) await window.syncNodesTrafficStats();
         window.renderTabNodes();
         window.autoCheckNodesHealth();
     };

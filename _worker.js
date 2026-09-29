@@ -1,3 +1,43 @@
+
+async function fetchCloudflareUsage(accountId, apiToken, scriptName) {
+    if (!accountId || !apiToken) return null;
+    try {
+        const currentDate = new Date().toISOString().split("T")[0] + "T00:00:00Z";
+        const query = `query GetDailyUsage($accountId: String!, $start: ISO8601DateTime!) {
+            viewer {
+                accounts(filter: {accountTag: $accountId}) {
+                    workersInvocationsAdaptive(limit: 100, filter: { datetime_geq: $start }) {
+                        dimensions { scriptName }
+                        sum { requests }
+                    }
+                }
+            }
+        }`;
+        const res = await fetch("https://api.cloudflare.com/client/v4/graphql", {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${apiToken}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ query, variables: { accountId, start: currentDate } })
+        });
+        if (!res.ok) return null;
+        const j = await res.json();
+        const records = j?.data?.viewer?.accounts?.[0]?.workersInvocationsAdaptive || [];
+        let total = 0, scriptReqs = 0;
+        records.forEach(r => {
+            const reqCount = r?.sum?.requests || 0;
+            total += reqCount;
+            if (scriptName && r?.dimensions?.scriptName === scriptName) {
+                scriptReqs = reqCount;
+            }
+        });
+        return { totalRequests: total, scriptRequests: scriptReqs || total };
+    } catch(e) {
+        return null;
+    }
+}
+
 function safeB64(str) {
     try {
         return btoa(unescape(encodeURIComponent(str)));
@@ -975,6 +1015,10 @@ export default {
 
                         // مشخصات سیستم و 
         if (reqPath === `${routeBase}/api/stats` || reqPath.endsWith("/api/stats")) {
+        let cfUsageData = null;
+        if (sysConfig.cfAccountId && sysConfig.cfApiToken) {
+            cfUsageData = await fetchCloudflareUsage(sysConfig.cfAccountId, sysConfig.cfApiToken, sysConfig.cfWorkerName || "mehr");
+        }
             let users = [];
             try {
                 const uRes = await env.IOT_DB.prepare("SELECT * FROM users").all();
@@ -1047,7 +1091,12 @@ export default {
                 ],
                 stats: {
                     users: { total: totalUsers, active: activeUsers, paused: pausedUsers, autoDisabled: autoDisabledUsers, expired: expiredUsers },
-                    traffic: { totalGB: totalGBVal, dailyGB: Number((totalGBVal * 0.3).toFixed(2)), totalRequests: activeUsers * 12, dailyRequests: activeUsers * 4 },
+                    traffic: {
+                    totalGB: (totalBytesAllUsers / (1024 * 1024 * 1024)).toFixed(2),
+                    dailyGB: (totalBytesAllUsers / (1024 * 1024 * 1024)).toFixed(2),
+                    totalRequests: cfUsageData ? cfUsageData.totalRequests : 107,
+                    dailyRequests: cfUsageData ? cfUsageData.scriptRequests : 107
+                },
                     system: { activeConnections: activeFinal, version: "3.5.0", cpu: 10, memory: 25 },
                     usage: dynamicUsage
                 }
@@ -1070,10 +1119,19 @@ export default {
         // مدیریت نودها در دیتابیس رابطه‌ای D1
         if (reqPath === `${routeBase}/api/nodes` || reqPath.endsWith("/api/nodes")) {
             if (request.method === "GET") {
-                const { results } = await env.IOT_DB.prepare("SELECT * FROM nodes ORDER BY created_at DESC").all();
+                const { results } = await env.IOT_DB.prepare(`
+                    SELECT n.*, 
+                           COALESCE(SUM(nt.bytes_uploaded + nt.bytes_downloaded), 0) AS total_bytes,
+                           COALESCE(COUNT(DISTINCT nt.user_uuid), 0) AS active_users_count
+                    FROM nodes n
+                    LEFT JOIN node_traffic nt ON n.id = nt.node_id
+                    GROUP BY n.id
+                    ORDER BY n.created_at DESC
+                `).all();
                 const computedNodes = (results || []).map(n => ({
                     ...n,
                     address: n.url,
+                    total_bytes: Number(n.total_bytes || 0),
                     is_online: n.status === "active"
                 }));
                 return jsonResponse({ success: true, nodes: computedNodes });

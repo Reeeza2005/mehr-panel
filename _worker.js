@@ -1195,7 +1195,7 @@ export default {
                     ...n,
                     address: n.url,
                     total_bytes: Number(n.total_bytes || 0),
-                    is_online: (Math.floor(Date.now() / 1000) - (n.last_seen || 0)) < 300 && n.status === "active", country: (n.country && n.country.length === 2 ? n.country : "US"), flag: getCountryFlag(n.country || "US")
+                    is_online: n.last_seen > 0 && (Math.floor(Date.now() / 1000) - n.last_seen) < 300 && n.status === "active", country: (n.country && n.country.length === 2 ? n.country.toUpperCase() : "US"), flag: getCountryFlag(n.country || "US"), country: (n.country && n.country.length === 2 ? n.country : "US"), flag: getCountryFlag(n.country || "US")
                 }));
                 return jsonResponse({ success: true, nodes: computedNodes });
             }
@@ -1240,7 +1240,7 @@ export default {
                     b.api_key || sysConfig.clusterKey || "mehr_cluster_secret_2026", 
                     b.status || "active", 
                     country, 
-                    Math.floor(Date.now() / 1000),
+                    0,
                     id,
                     Math.floor(Date.now() / 1000)
                 ).run();

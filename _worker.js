@@ -71,7 +71,7 @@ function safeB64(str) {
 }
 
 function getCountryFlag(cc) {
-    if (!cc || cc.length !== 2) return "🌐";
+    if (!cc || cc.length !== 2 || cc === "XX" || cc === "UNKNOWN") return "🌐";
     cc = cc.toUpperCase();
     return String.fromCodePoint(...[...cc].map(c => 127397 + c.charCodeAt(0)));
 }
@@ -143,7 +143,7 @@ export default {
                 });
                 const lat = Date.now() - tStart;
                 const cfCountry = pingRes.headers.get("cf-ipcountry") || (pingRes.cf && pingRes.cf.country) || "US";
-                const isHealthy = pingRes.status < 500;
+                const isHealthy = pingRes.ok || pingRes.status === 200 || pingRes.status === 401;
 
                 return jsonResponse({
                     ok: isHealthy,
@@ -158,14 +158,70 @@ export default {
             }
         }
 
-        // روت داشبورد
+        // روت سابسکریپشن کلاینت‌ها و کاربران
+        const subParam = url.searchParams.get('sub');
+        if (reqPath.includes('/sub/') || subParam) {
+            const rawId = subParam || reqPath.split('/sub/')[1];
+            if (rawId) {
+                const cleanId = decodeURIComponent(rawId.split('?')[0].trim()).toLowerCase();
+                let userRecord = null;
+
+                if (sysConfig && Array.isArray(sysConfig.users)) {
+                    userRecord = sysConfig.users.find(u => 
+                        (u.name && u.name.toLowerCase() === cleanId) ||
+                        (u.username && u.username.toLowerCase() === cleanId) ||
+                        (u.id && u.id.toLowerCase() === cleanId) ||
+                        (u.uuid && u.uuid.toLowerCase() === cleanId)
+                    );
+                }
+
+                if (!userRecord && env.IOT_DB) {
+                    try {
+                        userRecord = await env.IOT_DB.prepare("SELECT * FROM users WHERE lower(username) = ? OR lower(uuid) = ? OR lower(id) = ?").bind(cleanId, cleanId, cleanId).first();
+                    } catch(e) {}
+                }
+
+                if (!userRecord || userRecord.isPaused) {
+                    return new Response("User not found or disabled", { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8" } });
+                }
+
+                const userUuid = userRecord.uuid || userRecord.id;
+                const displayName = userRecord.name || userRecord.username || "کاربر مِهر";
+
+                let nodesList = [];
+                if (env.IOT_DB) {
+                    try {
+                        const nRes = await env.IOT_DB.prepare("SELECT * FROM nodes WHERE status = 'active'").all();
+                        nodesList = nRes.results || [];
+                    } catch(e) {}
+                }
+
+                let vlessConfigs = [];
+                nodesList.forEach(node => {
+                    let host = (node.url || node.address || "").replace(/^[a-zA-Z]+:\/\//, '').replace(/\/$/, '');
+                    if (host) {
+                        const flag = getCountryFlag(node.country || "US");
+                        const tag = `${flag} ${node.name || host}`;
+                        vlessConfigs.push(`vless://${userUuid}@${host}:443?encryption=none&security=tls&sni=${host}&host=${host}&type=ws&path=%2Fvl#${encodeURIComponent(tag)}`);
+                    }
+                });
+
+                if (vlessConfigs.length === 0) {
+                    vlessConfigs.push(`vless://${userUuid}@${url.hostname}:443?encryption=none&security=tls&sni=${url.hostname}&host=${url.hostname}&type=ws&path=%2Fvless#${encodeURIComponent("Mehr-Main")}`);
+                }
+
+                return new Response(safeB64(vlessConfigs.join("\n")), {
+                    headers: { "Content-Type": "text/plain; charset=utf-8" }
+                });
+            }
+        }
+
+        // روت نمایش داشبورد
         if (reqPath === `${routeBase}/dash` || reqPath === "/dash" || reqPath.endsWith("/dash")) {
             let html = HTML_CONTENT
                 .replace(/__CURRENT_VERSION__/g, CURRENT_VERSION)
                 .replace(/__HAS_DB_WARNING__/g, "");
-            return new Response(html, {
-                headers: { "Content-Type": "text/html; charset=utf-8" },
-            });
+            return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } });
         }
 
         // احراز هویت ادمین
@@ -186,7 +242,7 @@ export default {
             }
         }
 
-        // آمار و مصرف کل اکانت
+        // آمار واقعی کل اکانت کلادفلر
         if (reqPath === `${routeBase}/api/stats` || reqPath.endsWith("/api/stats")) {
             let totalAccountReqs = 0;
             if (sysConfig.cfAccountId && sysConfig.cfApiToken) {
@@ -223,19 +279,20 @@ export default {
             });
         }
 
-        // لیست و مدیریت نودها با بررسی وضعیت زنده و ارسال کشور/پرچم
+        // مدیریت نودها در دیتابیس D1 همراه با ارزیابی زنده بودن نود و پرچم کشور
         if (reqPath === `${routeBase}/api/nodes` || reqPath.endsWith("/api/nodes")) {
             if (request.method === "GET") {
                 const { results } = await env.IOT_DB.prepare("SELECT * FROM nodes ORDER BY created_at DESC").all();
                 const now = Math.floor(Date.now() / 1000);
-                
+
                 const computedNodes = (results || []).map(n => {
                     const lastSeen = n.last_seen || 0;
-                    // اگر نود فیک باشد یا ۱۰ دقیقه پاسخی نفرستاده باشد، آفلاین است
-                    const isTrulyOnline = (now - lastSeen) < 600 && n.status === "active";
-                    const cCode = n.country || "US";
+                    // نود فیک یا نودی که بیش از ۵ دقیقه سینک نکرده، قطعا آفلاین است
+                    const isTrulyOnline = (now - lastSeen) < 300 && n.status === "active";
+                    const cCode = (n.country && n.country.length === 2) ? n.country : "US";
                     return {
                         ...n,
+                        address: n.url || n.address,
                         country: cCode,
                         flag: getCountryFlag(cCode),
                         is_online: isTrulyOnline
@@ -274,7 +331,7 @@ export default {
             }
         }
 
-        // تبادل سینک نود به پنل مستر
+        // سینک رفت‌وبرگشت نودها به پنل مستر
         if (reqPath === `${routeBase}/api/node/sync` || reqPath.endsWith("/api/node/sync")) {
             try {
                 const nodeKey = request.headers.get("X-Node-Key");
@@ -300,6 +357,28 @@ export default {
                 return jsonResponse({ success: true, time: now });
             } catch(e) {
                 return jsonResponse({ success: false, error: e.message }, 500);
+            }
+        }
+
+        // مدیریت کاربران در دیتابیس D1
+        if (reqPath === `${routeBase}/api/users` || reqPath.endsWith("/api/users")) {
+            if (request.method === "GET") {
+                const { results } = await env.IOT_DB.prepare("SELECT * FROM users ORDER BY created_at DESC").all();
+                return jsonResponse({ success: true, users: results || [] });
+            }
+            if (request.method === "POST") {
+                const b = await request.json();
+                const id = b.id || "usr_" + Date.now();
+                await env.IOT_DB.prepare(`
+                    INSERT OR REPLACE INTO users (id, username, uuid, traffic_limit, used_traffic, expiry_date, status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                `).bind(id, b.username || b.name, b.uuid || id, b.traffic_limit || 0, b.used_traffic || 0, b.expiry_date || 0, b.status || "active").run();
+                return jsonResponse({ success: true });
+            }
+            if (request.method === "DELETE") {
+                const b = await request.json();
+                await env.IOT_DB.prepare("DELETE FROM users WHERE id = ? OR uuid = ?").bind(b.id, b.uuid || b.id).run();
+                return jsonResponse({ success: true });
             }
         }
 

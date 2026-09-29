@@ -940,7 +940,7 @@ html.dark select option {
                         <p id="tab-cluster-capacity-badge" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5" data-i18n="t4_cluster_loading">در حال بارگذاری وضعیت کلاستر...</p>
                     </div>
                     <div class="flex items-center gap-2">
-                        <button onclick="if(typeof renderTabNodes==='function')renderTabNodes();showToast('داده‌ها به‌روزرسانی شدند','success')" class="px-3 py-2 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800/90 dark:hover:bg-slate-700 text-slate-800 dark:text-white border border-slate-300 dark:border-slate-600 transition flex items-center gap-1.5 shadow-sm">
+                        <button onclick="if(typeof autoCheckNodesHealth==='function'){autoCheckNodesHealth();showToast('در حال پایش و به‌روزرسانی وضعیت نودها...','info');}else if(typeof renderTabNodes==='function'){renderTabNodes();}" class="px-3 py-2 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800/90 dark:hover:bg-slate-700 text-slate-800 dark:text-white border border-slate-300 dark:border-slate-600 transition flex items-center gap-1.5 shadow-sm">
                             <span data-i18n="t4_btn_refresh">🔄 به‌روزرسانی وضعیت</span>
                         </button>
                         <button onclick="showAddNodeModal()" type="button" class="px-4 py-2 text-xs font-bold rounded-xl bg-primary text-white hover:opacity-90 transition flex items-center gap-1.5 shadow-sm shadow-primary/20">
@@ -5403,7 +5403,7 @@ function buildModeCheckboxes(wrapId, userMode) {
 
     // تست ارتباط معتبر با استفاده از Image Ping که محدودیت CORS ندارد
     function pingHost(host, timeoutMs = 3000) {
-        return new Promise((resolve) => {
+        return new Promise(async (resolve) => {
             const start = Date.now();
             let resolved = false;
 
@@ -5414,29 +5414,25 @@ function buildModeCheckboxes(wrapId, userMode) {
                 }
             }, timeoutMs);
 
-            const img = new Image();
-            img.onload = () => {
+            try {
+                const clean = (host || "").trim().replace(/^https?:\/\//i, "").split("/")[0].split(":")[0];
+                const res = await fetch(`https://${clean}/favicon.ico?_r=${Math.random()}`, {
+                    mode: "no-cors",
+                    signal: AbortSignal.timeout(timeoutMs)
+                });
                 if (!resolved) {
                     resolved = true;
                     clearTimeout(timer);
-                    resolve({ ok: true, latency: Date.now() - start });
-                }
-            };
-            img.onerror = () => {
-                // اگر سرور در دسترس نباشد یا دامنه وجود نداشته باشد
-                if (!resolved) {
-                    resolved = true;
-                    clearTimeout(timer);
-                    // تاخیرهای خیلی سریع (زیر ۳۰ میلی‌ثانیه) روی onerror نشانه خطای فوری DNS/ناشناخته بودن دامنه است
                     const delta = Date.now() - start;
-                    if (delta > 35 && delta < timeoutMs) {
-                        resolve({ ok: true, latency: delta });
-                    } else {
-                        resolve({ ok: false, latency: "--" });
-                    }
+                    resolve({ ok: true, latency: delta });
                 }
-            };
-            img.src = "https://" + host + "/favicon.ico?_r=" + Math.random();
+            } catch (e) {
+                if (!resolved) {
+                    resolved = true;
+                    clearTimeout(timer);
+                    resolve({ ok: false, latency: "--" });
+                }
+            }
         });
     }
 
@@ -5575,9 +5571,9 @@ function buildModeCheckboxes(wrapId, userMode) {
                             <div class="flex items-center gap-2">
                                 <span class="w-2.5 h-2.5 rounded-full ${st.blocked ? "bg-red-600 animate-pulse" : (st.ws_ok === false && isOnline ? "bg-amber-500" : (isOnline ? "bg-emerald-500" : "bg-rose-500"))}"></span>
                                 <h3 class="text-sm font-bold text-slate-800 dark:text-white flex items-center gap-1.5">
-                                    <span>نود فرعی ${idx + 1}</span>
-                                    ${flagEmoji ? `<span class="text-base" title="${country}">${flagEmoji}</span>` : ""}
-                                    ${country ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-200 dark:bg-darkborder text-slate-700 dark:text-slate-300 font-mono font-bold">${country}</span>` : ""}
+                                    <span>نود ${idx + 1}: ${p.name || (host ? host.split(".")[0] : "Edge")}</span>
+                                    <span class="text-base" title="${country || "Cloudflare Global"}">${flagEmoji || "🌐"}</span>
+                                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-200 dark:bg-darkborder text-slate-700 dark:text-slate-300 font-mono font-bold">${country || "EDGE"}</span>
                                 </h3>
                             </div>
                             <span class="px-2.5 py-1 text-xs font-bold rounded-lg ${isOnline ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-rose-500/10 text-rose-500"}">

@@ -1,4 +1,23 @@
 
+async function syncNodeToD1(env, id, name, url, apiKey) {
+    if (!env.IOT_DB || !url) return;
+    const cleanH = url.replace(/^[a-zA-Z]+:\/\//, "").split("/")[0].split("@").pop().split(":")[0].toLowerCase();
+    const fullUrl = url.startsWith("http") ? url : ("https://" + url);
+    let country = "";
+    try {
+        const pingRes = await fetch("https://" + cleanH + "/favicon.ico", { signal: AbortSignal.timeout(3000) });
+        country = pingRes.headers.get("cf-ipcountry") || (pingRes.cf && pingRes.cf.country) || "";
+    } catch(e) {}
+    try {
+        await env.IOT_DB.prepare(
+            "INSERT INTO nodes (id, name, url, address, api_key, status, country, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, unixepoch()) ON CONFLICT(id) DO UPDATE SET url = excluded.url, address = excluded.address, country = COALESCE(NULLIF(excluded.country, ''), nodes.country)"
+        ).bind(id, name, fullUrl, cleanH, apiKey, "active", country).run();
+    } catch(err) {
+        console.error("syncNodeToD1 error:", err);
+    }
+}
+
+
 async function fetchCloudflareUsage(accountId, apiToken, scriptName) {
     if (!accountId || !apiToken) return null;
     try {
@@ -1005,7 +1024,51 @@ export default {
                             console.error("D1 users sync error:", dbErr);
                         }
                     }
-                    await d1Put(env, "sys_config", JSON.stringify(sysConfig));
+                    // همگام‌سازی خودکار نودهای فرم پیشرفته با جدول دیتابیس D1
+                    if (Array.isArray(sysConfig.linkedPanels) && env.IOT_DB) {
+                        for (let i = 0; i < sysConfig.linkedPanels.length; i++) {
+                            const p = sysConfig.linkedPanels[i];
+                            if (p && p.url) {
+                                const cleanH = p.url.replace(/^[a-zA-Z]+:\/\//, "").split("/")[0].split("@").pop().split(":")[0].toLowerCase();
+                                const nId = "node-" + (i + 2);
+                                const nName = p.name || ("Mehr Edge " + (i + 2));
+                                const nUrl = p.url.startsWith("http") ? p.url : ("https://" + p.url);
+                                
+                                try {
+                                    await env.IOT_DB.prepare(
+                                        "INSERT INTO nodes (id, name, url, address, api_key, status, created_at) VALUES (?, ?, ?, ?, ?, ?, unixepoch()) ON CONFLICT(id) DO UPDATE SET url = excluded.url, address = excluded.address"
+                                    ).bind(nId, nName, nUrl, cleanH, p.apiKey || sysConfig.clusterKey || "mehr_cluster_secret_2026", "active").run();
+                                } catch(err) {}
+                            }
+                        }
+                    }
+                    // همگام‌سازی خودکار نودهای فرم پیشرفته با جدول دیتابیس D1
+                    if (Array.isArray(sysConfig.linkedPanels) && env.IOT_DB) {
+                        for (let i = 0; i < sysConfig.linkedPanels.length; i++) {
+                            const p = sysConfig.linkedPanels[i];
+                            if (p && p.url) {
+                                const cleanH = p.url.replace(/^[a-zA-Z]+:\/\//, "").split("/")[0].split("@").pop().split(":")[0].toLowerCase();
+                                const nId = "node-" + (i + 2);
+                                const nName = p.name || ("Mehr Edge " + (i + 2));
+                                const nUrl = p.url.startsWith("http") ? p.url : ("https://" + p.url);
+                                
+                                try {
+                                    await env.IOT_DB.prepare(
+                                        "INSERT INTO nodes (id, name, url, address, api_key, status, created_at) VALUES (?, ?, ?, ?, ?, ?, unixepoch()) ON CONFLICT(id) DO UPDATE SET url = excluded.url, address = excluded.address"
+                                    ).bind(nId, nName, nUrl, cleanH, p.apiKey || sysConfig.clusterKey || "mehr_cluster_secret_2026", "active").run();
+                                } catch(err) {}
+                            }
+                        }
+                    }
+                    if (Array.isArray(sysConfig.linkedPanels) && env.IOT_DB) {
+                    for (let i = 0; i < sysConfig.linkedPanels.length; i++) {
+                        const p = sysConfig.linkedPanels[i];
+                        if (p && p.url) {
+                            await syncNodeToD1(env, "node-" + (i + 2), p.name || ("Mehr Edge " + (i + 2)), p.url, p.apiKey || sysConfig.clusterKey || "mehr_cluster_secret_2026");
+                        }
+                    }
+                }
+                await d1Put(env, "sys_config", JSON.stringify(sysConfig));
                 }
                 return jsonResponse({ success: true, config: sysConfig });
             } catch(e) {

@@ -267,7 +267,7 @@ function getAllProfiles(targetSub = null) {
 import { connect } from "cloudflare:sockets";
 import HTML_CONTENT from "./dashboard.html";
 
-const CURRENT_VERSION = "3.5.0";
+const CURRENT_VERSION = "3.5.5";
 
 const SYSTEM_DEFAULTS = {
     githubRepo: 'Reeeza2005/mehr-panel',

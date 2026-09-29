@@ -1155,10 +1155,33 @@ export default {
             if (request.method === "POST") {
                 const b = await request.json();
                 const id = b.id || "node_" + Date.now();
+                const nodeUrl = b.url || b.address || "";
+                let country = b.country || "";
+                
+                // در صورت خالی بودن کشور، شناسایی خودکار از پاسخ کلودفلر
+                if (!country && nodeUrl) {
+                    try {
+                        const testClean = nodeUrl.replace(/^[a-zA-Z]+:\/\//, "").split("/")[0].split(":")[0];
+                        const pingRes = await fetch("https://" + testClean + "/favicon.ico", { signal: AbortSignal.timeout(3000) });
+                        country = pingRes.headers.get("cf-ipcountry") || (pingRes.cf && pingRes.cf.country) || "";
+                    } catch(e) {}
+                }
+
                 await env.IOT_DB.prepare(
-                    "INSERT OR REPLACE INTO nodes (id, name, address, api_key, status, last_seen) VALUES (?, ?, ?, ?, ?, ?)"
-                ).bind(id, b.name, b.address, b.api_key || sysConfig.clusterKey, "active", Math.floor(Date.now() / 1000)).run();
-                return jsonResponse({ success: true });
+                    "INSERT OR REPLACE INTO nodes (id, name, url, address, api_key, status, country, last_seen, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT created_at FROM nodes WHERE id = ?), ?))"
+                ).bind(
+                    id, 
+                    b.name || id, 
+                    nodeUrl, 
+                    nodeUrl, 
+                    b.api_key || sysConfig.clusterKey || "mehr_cluster_secret_2026", 
+                    b.status || "active", 
+                    country, 
+                    Math.floor(Date.now() / 1000),
+                    id,
+                    Math.floor(Date.now() / 1000)
+                ).run();
+                return jsonResponse({ success: true, country: country });
             }
             if (request.method === "DELETE") {
                 const b = await request.json();

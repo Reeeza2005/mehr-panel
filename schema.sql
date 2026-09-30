@@ -29,15 +29,6 @@ CREATE TABLE IF NOT EXISTS nodes (
     created_at TEXT
 );
 
-CREATE TABLE IF NOT EXISTS node_traffic (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_uuid TEXT,
-    node_id TEXT,
-    bytes_uploaded INTEGER DEFAULT 0,
-    bytes_downloaded INTEGER DEFAULT 0,
-    last_update TEXT
-);
-
 CREATE TABLE IF NOT EXISTS clean_ips (
     id TEXT PRIMARY KEY,
     ip TEXT,

@@ -1,4 +1,4 @@
-account_id = "8d1b3a222f87860731bb33497221a923"
+account_id = "aa639a109164fcb56c915326b7b269ad"
 name = "mehr"
 main = "_worker.js"
 compatibility_date = "2024-09-01"
@@ -11,4 +11,4 @@ fallthrough = true
 [[d1_databases]]
 binding = "IOT_DB"
 database_name = "super_panel_db"
-database_id = "bd011125-1316-4b6d-a39e-074f8195d6fb"
+database_id = "d334eb2c-332f-4880-a11c-29f97c09151d"

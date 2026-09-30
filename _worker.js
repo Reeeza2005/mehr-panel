@@ -1191,7 +1191,14 @@ export default {
         // مدیریت نودها در دیتابیس رابطه‌ای D1
         if (reqPath === `${routeBase}/api/nodes` || reqPath.endsWith("/api/nodes")) {
             if (request.method === "GET") {
-                const { results } = await env.IOT_DB.prepare(`SELECT * FROM nodes ORDER BY created_at DESC`).all();
+                const { results } = await env.IOT_DB.prepare(`
+                    SELECT n.*, 
+                           COALESCE(SUM(nt.bytes_uploaded + nt.bytes_downloaded), 0) AS total_bytes
+                    FROM nodes n
+                    LEFT JOIN node_traffic nt ON (nt.node_id = n.id OR nt.node_id LIKE '%' || n.id || '%')
+                    GROUP BY n.id
+                    ORDER BY n.created_at DESC
+                `).all();
                 const computedNodes = (results || []).map(n => ({
                     ...n,
                     address: n.url,
@@ -1343,6 +1350,15 @@ export default {
                         bytes_downloaded = bytes_downloaded + excluded.bytes_downloaded,
                         last_update = excluded.last_update
                 `).bind(userUuid, nodeId, uUp, uDown, now).run();
+
+                // بروزرسانی ترافیک مصرفی روی خود نود (سرور)
+                if (deltaBytes > 0 && nodeId) {
+                    try {
+                        await env.IOT_DB.prepare(
+                            "UPDATE nodes SET last_seen = ?, status = 'active' WHERE id = ? OR address LIKE ?"
+                        ).bind(now, nodeId, "%" + nodeId + "%").run();
+                    } catch(e) {}
+                }
 
                 if (deltaBytes > 0) {
                     await env.IOT_DB.prepare(

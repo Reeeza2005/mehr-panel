@@ -149,32 +149,48 @@ function generateInfoConfigs(sysConf, userRec, usedBytes, host) {
     // محاسبه سقف کل و نودهای فعال کاربر
     let activeNodesCount = 1;
     if (userRec.userNodes) {
-        const uNodes = Array.isArray(userRec.userNodes) ? userRec.userNodes : String(userRec.userNodes).split(",");
-        const validNodes = uNodes.filter(n => n && n.trim().length > 0);
+        const uNodes = Array.isArray(userRec.userNodes) ? userRec.userNodes : String(userRec.userNodes).split(/[,\n]+/);
+        const validNodes = uNodes.map(n => n.trim()).filter(Boolean);
         if (validNodes.length > 0) activeNodesCount = validNodes.length;
-    } else if (sysConfig && Array.isArray(sysConfig.nodes)) {
-        const actN = sysConfig.nodes.filter(n => n.status === "active");
-        if (actN.length > 0) activeNodesCount = actN.length;
     }
 
-    let baseBytes = 100 * 1024 * 1024;
+    // ۱. سقف کل ترافیک (مستقل از تعداد ورکرها)
+    let totalLimitBytes = 0;
     if (userRec.traffic_limit && Number(userRec.traffic_limit) > 0) {
-        baseBytes = Number(userRec.traffic_limit);
+        totalLimitBytes = Number(userRec.traffic_limit);
     } else if (userRec.limitTotalReq && Number(userRec.limitTotalReq) > 0) {
-        baseBytes = Math.floor((Number(userRec.limitTotalReq) / 6000) * 1024 * 1024 * 1024);
+        totalLimitBytes = Math.floor((Number(userRec.limitTotalReq) / 6000) * 1024 * 1024 * 1024);
     }
-    const userTotalBytes = baseBytes * activeNodesCount;
-    const totalMb = Math.round(userTotalBytes / (1024 * 1024));
-    let limitStr = totalMb >= 1024 ? (totalMb / 1024).toFixed(1) + " GB" : totalMb + " MB";
-    limitStr += ` (${activeNodesCount} ورکر)`;
+    const totalLimitStr = totalLimitBytes > 0 ? (totalLimitBytes / (1024 * 1024 * 1024)).toFixed(2) + " GB" : "نامحدود";
+    const totalUsedGbStr = (usedBytes / (1024 * 1024 * 1024)).toFixed(2) + " GB";
 
-    // ساخت نوار وضعیت مصرف متنی
-    const pct = userTotalBytes > 0 ? Math.min(100, Math.round((usedBytes / userTotalBytes) * 100)) : 0;
-    const totalBars = 10;
+    // ۲. سقف مصرف روزانه (ضرب در تعداد ورکرهای فعال)
+    const dailyUsedBytes = Number(userRec.daily_used || userRec.dailyBytes || userRec.dBytes || 0);
+    const baseDailyBytes = (userRec.daily_limit && Number(userRec.daily_limit) > 0) 
+        ? Number(userRec.daily_limit) 
+        : (userRec.limitDailyReq && Number(userRec.limitDailyReq) > 0 
+            ? Math.floor((Number(userRec.limitDailyReq) / 6000) * 1024 * 1024 * 1024) 
+            : 1073741824); // 1GB پیش‌فرض
+            
+    const effectiveDailyLimitBytes = baseDailyBytes * activeNodesCount;
+    const dailyLimitStr = (effectiveDailyLimitBytes / (1024 * 1024 * 1024)).toFixed(2) + " GB";
+    const dailyUsedStr = (dailyUsedBytes / (1024 * 1024 * 1024)).toFixed(2) + " GB";
+
+    // ۳. قالب استاندارد بدون متن اضافه ورکر
+    // محاسبه نوار ماتریسی مصرف کل
+    const pct = totalLimitBytes > 0 ? Math.min(100, Math.round((usedBytes / totalLimitBytes) * 100)) : 0;
+    const totalBars = 8;
     const filledBars = Math.min(totalBars, Math.round((pct / 100) * totalBars));
     const emptyBars = totalBars - filledBars;
     const progressBar = "█".repeat(filledBars) + "░".repeat(emptyBars);
-    const usageStr = `📊 [${progressBar}] ${pct}% | ${usedStr} /${limitStr}`;
+
+    const totalGbClean = (usedBytes / (1024 * 1024 * 1024)).toFixed(2) + " GB";
+    const limitGbClean = totalLimitBytes > 0 ? (totalLimitBytes / (1024 * 1024 * 1024)).toFixed(2) + " GB" : "نامحدود";
+
+    const dailyGbClean = (dailyUsedBytes / (1024 * 1024 * 1024)).toFixed(2) + " GB";
+    const limitDailyGbClean = (effectiveDailyLimitBytes / (1024 * 1024 * 1024)).toFixed(2) + " GB";
+
+    const usageStr = `📊 روزانه: ${dailyGbClean} / ${limitDailyGbClean} | کل: [${progressBar}] ${totalGbClean} / ${limitGbClean}`;
 
     // محاسبه تاریخ انقضای شمسی
     let daysLeft = "نامحدود";
@@ -212,37 +228,31 @@ function generateInfoConfigs(sysConf, userRec, usedBytes, host) {
 
 
 async function getLiveUsageMap(env, sysConfig) {
-    let usageMap = {};
-    if (!env || !env.IOT_DB) return usageMap;
-    try {
-        const { results } = await env.IOT_DB.prepare(
-            "SELECT user_uuid, node_id, bytes_uploaded, bytes_downloaded, last_update FROM node_traffic ORDER BY last_update DESC LIMIT 50"
-        ).all();
-        if (results && results.length > 0) {
-            results.forEach(r => {
-                const totalBytes = (r.bytes_uploaded || 0) + (r.bytes_downloaded || 0);
-                const kb = (totalBytes / 1024).toFixed(1);
-                const rawUuid = r.user_uuid || "";
-                const cleanHash = rawUuid.replace(/-/g, "").toLowerCase();
-                
-                const metrics = {
-                    connects: 1,
-                    last: r.last_update > 1e11 ? r.last_update : r.last_update * 1000,
-                    bytes: totalBytes,
-                    speed: `${kb} KB`,
-                    node: r.node_id || "Direct"
-                };
-                
-                if (cleanHash) {
-                    usageMap[cleanHash] = metrics;
-                }
-                if (rawUuid) {
-                    usageMap[rawUuid] = metrics;
-                }
-            });
-        }
-    } catch(e) {}
-    return usageMap;
+	let usageMap = {};
+	if (!env || !env.IOT_DB) return usageMap;
+	try {
+		const { results } = await env.IOT_DB.prepare(
+			"SELECT uuid, used_traffic, last_seen FROM users WHERE used_traffic > 0 ORDER BY last_seen DESC LIMIT 50"
+		).all();
+		if (results && results.length > 0) {
+			results.forEach(r => {
+				const totalBytes = Number(r.used_traffic || 0);
+				const kb = (totalBytes / 1024).toFixed(1);
+				const rawUuid = r.uuid || "";
+				const cleanHash = rawUuid.replace(/-/g, "").toLowerCase();
+				const metrics = {
+					connects: 1,
+					last: r.last_seen > 1e11 ? r.last_seen : (r.last_seen ? r.last_seen * 1000 : Date.now()),
+					bytes: totalBytes,
+					speed: `${kb} KB`,
+					node: "Direct"
+				};
+				if (cleanHash) usageMap[cleanHash] = metrics;
+				if (rawUuid) usageMap[rawUuid] = metrics;
+			});
+		}
+	} catch(e) {}
+	return usageMap;
 }
 
 
@@ -463,11 +473,27 @@ export default {
                 let vlessConfigs = [];
 
                 // 1. ورودی‌های اطلاعاتی اشتراک (Fake / Info Configs)
+                // محاسبه دقیق نودهای فعال جهت نمایش سقف روزانه مجاز
+                let userNodesCount = 1;
+                if (userRecord.userNodes) {
+                    const uNodes = Array.isArray(userRecord.userNodes) ? userRecord.userNodes : String(userRecord.userNodes).split(",");
+                    const validNodes = uNodes.filter(n => n && n.trim().length > 0);
+                    if (validNodes.length > 0) userNodesCount = validNodes.length;
+                }
+
                 const totalReqsBytes = Number(userRecord.traffic_used || userRecord.used_traffic || userRecord.usedTraffic || 0);
                 const limitTotalBytes = (userRecord.traffic_limit || userRecord.limitTotalReq || 0);
                 const totalGbStr = (totalReqsBytes / (1024 * 1024 * 1024)).toFixed(2);
                 const limitGbStr = limitTotalBytes > 0 ? (limitTotalBytes / (1024 * 1024 * 1024)).toFixed(2) + " GB" : "Unlimited";
-                const usageInfo = `📊 Used: ${totalGbStr} GB / ${limitGbStr}`;
+
+                // مصرف روزانه
+                const dailyReqsBytes = Number(userRecord.daily_used || userRecord.dailyBytes || 0);
+                const baseDailyLimit = Number(userRecord.daily_limit || userRecord.limitDailyReq || 1073741824); // 1GB default
+                const totalAllowedDailyBytes = baseDailyLimit * userNodesCount;
+                const dailyGbStr = (dailyReqsBytes / (1024 * 1024 * 1024)).toFixed(2);
+                const limitDailyGbStr = (totalAllowedDailyBytes / (1024 * 1024 * 1024)).toFixed(2) + " GB";
+
+                const usageInfo = `📊 Daily: ${dailyGbStr} / ${limitDailyGbStr} | Total: ${totalGbStr} GB / ${limitGbStr}`;
                 
                 let expiryInfo = "📅 Expiry: Never Expire";
                 const expMs = userRecord.expiryMs || userRecord.expire_time;
@@ -521,6 +547,7 @@ export default {
                 }
 
                 let nodeTargets = [];
+                if (allowedNodes.size > 0) {
                 for (const node of nodesList) {
                     let pureH = getPureHost(node.url || node.host || "");
                     let origHost = (node.url || node.host || "").replace(/^[a-zA-Z]+:\/\//, "").replace(/\/$/, "").trim();
@@ -540,6 +567,8 @@ export default {
                             country: node.country || ""
                         });
                     }
+                }
+
                 }
                 // اگر محدودیتی اعمال شده و نودی انتخاب نشده، هیچ نودی اضافه نشود (فقط کانفیگ‌های اطلاعاتی بازگردند)
                 // حفظ انحصار ترافیک برای ورکرهای فرعی: ورکر اصلی هرگز به عنوان نود ترافیکی عمل نمی کند
@@ -737,11 +766,7 @@ export default {
                         usedBytes = Number(userRecord.usedTraffic || userRecord.used_traffic);
                     }
 
-                    // ۲. اگر گزارشی در node_traffic بود، اضافه شود
-                    const dbRes = await env.IOT_DB.prepare(
-                        "SELECT SUM(bytes_uploaded + bytes_downloaded) as total FROM node_traffic WHERE user_uuid = ?"
-                    ).bind(userUuid).first();
-                    if (dbRes && dbRes.total) usedBytes += Number(dbRes.total);
+                    // محاسبه مستقیم از جدول کاربران انجام شد
                     } catch(e) {}
 
                     if (userRecord) {
@@ -1103,26 +1128,10 @@ export default {
                 nodeList = nRes.results || [];
             } catch(e) {}
 
-            let dynamicUsage = {};
-            let liveConnectionsCount = 0;
-            try {
-                const { results: tResults } = await env.IOT_DB.prepare("SELECT user_uuid, SUM(bytes_uploaded + bytes_downloaded) as total_bytes, MAX(last_update) as last_seen FROM node_traffic GROUP BY user_uuid").all();
-                if (tResults && Array.isArray(tResults)) {
-                    tResults.forEach(r => {
-                        const cleanId = (r.user_uuid || "").replace(/-/g, "").toLowerCase();
-                        const lastTime = r.last_update || r.last_seen || nowSec;
-                        const isLive = (nowSec - lastTime) < 3600;
-                        if (isLive) liveConnectionsCount++;
-                        dynamicUsage[cleanId] = {
-                            connects: 1,
-                            bytes: r.total_bytes || 0,
-                            last: (lastTime > 1e11 ? lastTime : lastTime * 1000)
-                        };
-                    });
-                }
-            } catch(e) {}
+            			let dynamicUsage = {};
+			let liveConnectionsCount = (typeof activeConnections !== "undefined" && activeConnections > 0) ? activeConnections : (typeof OPEN_WS !== "undefined" ? OPEN_WS : 0);
 
-            // تکمیل dynamicUsage از جدول users در صورتی که دیتای node_traffic خالی باشد
+            // محاسبه dynamicUsage از جدول users
             let totalBytesAllUsers = 0;
             if (Array.isArray(users)) {
                 users.forEach(u => {
@@ -1182,20 +1191,12 @@ export default {
         // مدیریت نودها در دیتابیس رابطه‌ای D1
         if (reqPath === `${routeBase}/api/nodes` || reqPath.endsWith("/api/nodes")) {
             if (request.method === "GET") {
-                const { results } = await env.IOT_DB.prepare(`
-                    SELECT n.*, 
-                           COALESCE(SUM(nt.bytes_uploaded + nt.bytes_downloaded), 0) AS total_bytes,
-                           COALESCE(COUNT(DISTINCT nt.user_uuid), 0) AS active_users_count
-                    FROM nodes n
-                    LEFT JOIN node_traffic nt ON n.id = nt.node_id
-                    GROUP BY n.id
-                    ORDER BY n.created_at DESC
-                `).all();
+                const { results } = await env.IOT_DB.prepare(`SELECT * FROM nodes ORDER BY created_at DESC`).all();
                 const computedNodes = (results || []).map(n => ({
                     ...n,
                     address: n.url,
                     total_bytes: Number(n.total_bytes || 0),
-                    is_online: n.last_seen > 0 && (Math.floor(Date.now() / 1000) - n.last_seen) < 300 && n.status === "active", country: (n.country && n.country.length === 2 ? n.country.toUpperCase() : "US"), flag: getCountryFlag(n.country || "US"), country: (n.country && n.country.length === 2 ? n.country : "US"), flag: getCountryFlag(n.country || "US")
+                    is_online: n.last_seen > 0 && (Math.floor(Date.now() / 1000) - n.last_seen) < 300 && n.status === "active", country: (n.country && n.country.length === 2 ? (n.country.toUpperCase()) : "US"), flag: getCountryFlag(n.country || "US")
                 }));
                 return jsonResponse({ success: true, nodes: computedNodes });
             }
@@ -1261,7 +1262,6 @@ export default {
 
                 // ۲. حذف از دیتابیس D1
                 await env.IOT_DB.prepare("DELETE FROM nodes WHERE id = ?").bind(b.id).run();
-                await env.IOT_DB.prepare("DELETE FROM node_traffic WHERE node_id = ?").bind(b.id).run();
 
                 // ۳. پاکسازی آبشاری نود از لیست تمامی کاربران
                 if (nodeHost && Array.isArray(sysConfig.users)) {
@@ -1293,50 +1293,39 @@ export default {
             }
         }
 
-        // تبادل دوطرفه نود با ورکر 
-        if (reqPath === `${routeBase}/api/node/sync` || reqPath === '/api/node/sync' || reqPath.endsWith('/api/node/sync')) {
+        // تبادل دوطرفه نود با ورکر اصلی
+        if (reqPath === `${routeBase}/api/node/sync` || reqPath === "/api/node/sync" || reqPath.endsWith("/api/node/sync")) {
             try {
                 const nodeKey = request.headers.get("X-Node-Key");
                 const b = await request.json();
-                const nodeId = b.node_id;
+                const nodeId = b.node_id || b.id;
 
                 if (!nodeKey || (nodeKey !== sysConfig.clusterKey && !nodeKey.startsWith("mehr_"))) {
                     return jsonResponse({ success: false, error: "Unauthorized Node Key" }, 401);
                 }
 
                 const now = Math.floor(Date.now() / 1000);
-                const todayStr = new Date().toISOString().slice(0, 10);
-                const reqDelta = Number(b.requests_count || b.req_count || (b.user_traffic ? b.user_traffic.length : 1));
-                
-                const nodeCountry = b.country || request.cf?.country || "";
-                const nodeName = b.name || `سرور لبه ${nodeId}`;
-                const nodeUrl = b.url || "";
-                
-                // در صورت وجود نداشتن نود، خودکار ایجاد می‌شود (پشتیبانی از بی‌نهایت ورکر جدید)
+                const todayStr = new Date().toISOString().split("T")[0];
+                const nodeName = b.node_name || b.name || nodeId;
+                const nodeUrl = b.node_url || b.address || "";
+                const nodeCountry = b.country || "";
+                const reqDelta = parseInt(b.requests_delta || b.requests || 0) || 0;
+
                 await env.IOT_DB.prepare(`
                     INSERT INTO nodes (id, name, url, api_key, created_at, status, country, daily_requests, last_reset_date, last_seen)
-                    VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, "active", ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                         last_seen = excluded.last_seen,
-                        status = 'active',
-                        country = CASE WHEN excluded.country != '' THEN excluded.country ELSE nodes.country END,
+                        status = "active",
+                        country = CASE WHEN excluded.country != "" THEN excluded.country ELSE nodes.country END,
                         daily_requests = CASE WHEN (nodes.last_reset_date IS NULL OR nodes.last_reset_date = excluded.last_reset_date) THEN COALESCE(nodes.daily_requests, 0) + excluded.daily_requests ELSE excluded.daily_requests END,
                         last_reset_date = excluded.last_reset_date
                 `).bind(nodeId, nodeName, nodeUrl, nodeKey, now, nodeCountry, reqDelta, todayStr, now).run();
 
                 if (b.user_traffic && Array.isArray(b.user_traffic)) {
                     for (const report of b.user_traffic) {
-                        await env.IOT_DB.prepare(`
-                            INSERT INTO node_traffic (user_uuid, node_id, bytes_uploaded, bytes_downloaded, last_update)
-                            VALUES (?, ?, ?, ?, ?)
-                            ON CONFLICT(user_uuid, node_id) DO UPDATE SET
-                                bytes_uploaded = bytes_uploaded + excluded.bytes_uploaded,
-                                bytes_downloaded = bytes_downloaded + excluded.bytes_downloaded,
-                                last_update = excluded.last_update
-                        `).bind(report.uuid, nodeId, report.up || 0, report.down || 0, now).run();
-
                         const delta = (report.up || 0) + (report.down || 0);
-                        if (delta > 0) {
+                        if (delta > 0 && report.uuid) {
                             await env.IOT_DB.prepare(
                                 "UPDATE users SET used_traffic = COALESCE(used_traffic, 0) + ? WHERE uuid = ?"
                             ).bind(delta, report.uuid).run();
@@ -1345,7 +1334,7 @@ export default {
                 }
 
                 const { results: blocked } = await env.IOT_DB.prepare(
-                    "SELECT uuid FROM users WHERE status != 'active' OR (traffic_limit > 0 AND used_traffic >= traffic_limit)"
+                    "SELECT uuid FROM users WHERE status != \"active\" OR (traffic_limit > 0 AND used_traffic >= traffic_limit)"
                 ).all();
 
                 return jsonResponse({
@@ -1382,7 +1371,6 @@ export default {
             if (request.method === "DELETE") {
                 const b = await request.json();
                 await env.IOT_DB.prepare("DELETE FROM users WHERE id = ? OR uuid = ?").bind(b.id, b.uuid || b.id).run();
-                await env.IOT_DB.prepare("DELETE FROM node_traffic WHERE user_uuid = ?").bind(b.uuid || b.id).run();
                 return jsonResponse({ success: true });
             }
         }

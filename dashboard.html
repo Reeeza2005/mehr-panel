@@ -3980,10 +3980,17 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
 
                   const unlimitedTxt = lang === 'fa' ? 'نامحدود' : 'Unlimited';
                   let limitTotalTxt = u.limitTotalReq ? u.limitTotalReq : unlimitedTxt;
-                  let limitDailyTxt = u.limitDailyReq ? u.limitDailyReq : unlimitedTxt;
+                  let userNodesList = [];
+                  if (u.userNodes) {
+                      userNodesList = Array.isArray(u.userNodes) ? u.userNodes : String(u.userNodes).split(/[,\n]+/);
+                      userNodesList = userNodesList.map(n => n.trim()).filter(Boolean);
+                  }
+                  let activeNodesCount = Math.max(1, userNodesList.length);
+                  let effectiveDailyLimitReq = u.limitDailyReq ? (u.limitDailyReq * activeNodesCount) : null;
+                  let limitDailyTxt = effectiveDailyLimitReq ? effectiveDailyLimitReq : unlimitedTxt;
 
                   let perT = u.limitTotalReq ? Math.min(100, (userReqs / u.limitTotalReq) * 100).toFixed(1) + '%' : '-';
-                  let perD = u.limitDailyReq ? Math.min(100, (userDReqs / u.limitDailyReq) * 100).toFixed(1) + '%' : '-';
+                  let perD = effectiveDailyLimitReq ? Math.min(100, (userDReqs / effectiveDailyLimitReq) * 100).toFixed(1) + '%' : '-';
 
                   let expTxt = unlimitedTxt;
                   let isExp = false;
@@ -4138,7 +4145,10 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                                   <div class="bg-gradient-to-r ${parseFloat(perD) > 85 ? 'from-red-500 to-rose-600' : parseFloat(perD) > 60 ? 'from-amber-500 to-orange-500' : 'from-emerald-500 to-teal-500'} h-full rounded-full" style="width: ${perD}"></div>
                               </div>
                               <div class="flex items-center justify-between mt-1">
-                                  <span class="text-[9px] text-slate-400">/ ${(u.limitDailyReq/6000).toFixed(2)} GB</span>
+                                  <span class="text-[9px] text-slate-400">/ ${((u.limitDailyReq/6000) * activeNodesCount).toFixed(2)} GB</span>
+                                  </div>
+                                  <div class="text-[8px] text-slate-400 dark:text-slate-500 mt-0.5 text-right font-normal">
+                                      سقف هر ورکر: ${(u.limitDailyReq/6000).toFixed(2)} GB (${activeNodesCount} ورکر)
                                   ${perD !== '-' ? `<span class="text-[9px] font-bold ${parseFloat(perD) > 85 ? 'text-red-500' : parseFloat(perD) > 60 ? 'text-amber-500' : 'text-emerald-500'}">${perD}</span>` : ''}
                               </div>
                               ` : '<div class="text-[9px] text-slate-400 mt-1">' + unlimitedTxt + '</div>'}
@@ -5488,7 +5498,7 @@ function buildModeCheckboxes(wrapId, userMode) {
                 const t = sData?.stats?.traffic || {};
                 window.clusterNodeStats.masterTotalBytes = Number(t.totalGB || 0) * 1073741824;
                 window.clusterNodeStats.masterTodayBytes = Number(t.dailyGB || 0) * 1073741824;
-                window.clusterNodeStats.masterDailyReqs = Number(t.dailyRequests || t.totalRequests || 107);
+                window.clusterNodeStats.masterDailyReqs = Number(t.dailyRequests ?? t.totalRequests ?? 0);
             }
         } catch(e) {}
         try {
@@ -5507,7 +5517,10 @@ function buildModeCheckboxes(wrapId, userMode) {
                             total_bytes: Number(n.total_bytes || 0),
                             today_bytes: Number(n.total_bytes || 0),
                             daily_requests: Number(n.daily_requests || 0),
-                            country: n.country || "DE"
+                            country: n.country || "US",
+                            flag: n.flag || "",
+                            is_online: n.is_online === true,
+                            online: n.is_online === true
                         };
                     });
                 }
@@ -5569,7 +5582,7 @@ function buildModeCheckboxes(wrapId, userMode) {
                     </div>
                     <div class="bg-slate-50 dark:bg-darkcard/80 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder">
                         <span class="text-slate-600 dark:text-slate-300 block text-[11px] font-medium mb-1">${isEn ? "Daily Requests" : "درخواست امروز"}</span>
-                        <span class="font-bold text-xs font-mono text-slate-800 dark:text-white">${Number(window.clusterNodeStats?.masterDailyReqs || 107).toLocaleString("fa-IR")}</span>
+                        <span class="font-bold text-xs font-mono text-slate-800 dark:text-white">${Number(window.clusterNodeStats?.masterDailyReqs ?? 0).toLocaleString("fa-IR")}</span>
                     </div>
                 </div>
                 <div class="pt-1 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
@@ -5585,10 +5598,10 @@ function buildModeCheckboxes(wrapId, userMode) {
             const lowHost = host.toLowerCase();
             const apiKey = (typeof p === "object" ? p.apiKey : "") || "";
             const st = stats[host] || stats[lowHost] || stats[rawUrl] || {};
-            const isOnline = st.online === true;
+            const isOnline = st.is_online === true || st.online === true;
             const latency = st.latency ? (st.latency + (typeof st.latency === 'number' ? " ms" : "")) : "--";
             const country = st.country || stats[lowHost]?.country || "";
-            const flagEmoji = getCountryFlagEmoji(country);
+            const flagEmoji = st.flag || getCountryFlagEmoji(country);
             const dailyReqs = st.daily_requests ?? stats[lowHost]?.daily_requests ?? 0;
 
             let nodeUsers = 0, nodeTotalBytes = 0, nodeTodayBytes = 0;

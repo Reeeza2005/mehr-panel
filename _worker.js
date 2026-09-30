@@ -1,3 +1,13 @@
+function safeBtoa(str) {
+    try {
+        const bytes = new TextEncoder().encode(str);
+        let bin = "";
+        for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+        return btoa(bin);
+    } catch(e) {
+        return btoa(unescape(encodeURIComponent(str)));
+    }
+}
 
 async function syncNodeToD1(env, id, name, url, apiKey) {
     if (!env.IOT_DB || !url) return;
@@ -447,6 +457,41 @@ export default {
                 // استخراج نودهای فعال
                 // استخراج نودهای فعال و نودهای فرعی BPB
                 let nodesList = [];
+if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nodes WHERE status='active' AND (address IS NOT NULL OR url IS NOT NULL)").all();if(nR&&nR.length>0){nodeTargets=nR.map(n=>({name:n.name||"Edge",host:(n.address||n.url||"").replace(/^https?:\/\//,"").split("/")[0].trim(),path:"vl",isNode:true})).filter(n=>n.host.length>0);}}catch(e){}}
+    if (env.IOT_DB) {
+        try {
+            const { results } = await env.IOT_DB.prepare("SELECT * FROM nodes WHERE status = 'active' AND (address IS NOT NULL OR url IS NOT NULL)").all();
+            nodesList = (results || []).map(n => ({
+                ...n,
+                host: (n.address || n.url || "").replace(/^https?:\/\//, "").split("/")[0].trim(),
+                path: "vl"
+            }));
+            if (nodesList.length > 0) nodeTargets = nodesList;
+        } catch(e) {}
+    }
+    if (env.IOT_DB) {
+        try {
+            const { results } = await env.IOT_DB.prepare("SELECT * FROM nodes WHERE status = 'active' AND (address IS NOT NULL OR url IS NOT NULL)").all();
+            nodesList = (results || []).map(n => ({
+                ...n,
+                host: (n.address || n.url || "").replace(/^https?:\/\//, "").split("/")[0].trim(),
+                path: "vl"
+            }));
+            if (nodesList.length > 0) nodeTargets = nodesList;
+        } catch(e) {}
+    }
+    if (env.IOT_DB) {
+        try {
+            const { results } = await env.IOT_DB.prepare("SELECT * FROM nodes WHERE status = 'active' AND (address IS NOT NULL OR url IS NOT NULL)").all();
+            nodesList = (results || []).filter(n => (n.address || n.url)).map(n => {
+                let h = (n.address || n.url || "").replace(/^https?:\/\//, "").split("/")[0].trim();
+                return { host: h, name: n.name || "Node", isNode: true, path: "vl" };
+            });
+        } catch(e) {}
+    }
+    if (nodesList.length > 0) {
+        nodeTargets = nodesList;
+    }
                 if (sysConfig && Array.isArray(sysConfig.linkedPanels)) {
                     sysConfig.linkedPanels.forEach((p, idx) => {
                         if (p && p.url) {
@@ -465,7 +510,7 @@ export default {
                 }
                 if (nodesList.length === 0 && env.IOT_DB) {
                     try {
-                        const nRes = await env.IOT_DB.prepare("SELECT * FROM nodes WHERE status = 'active'").all();
+                        const nRes = await env.IOT_DB.prepare("SELECT * FROM nodes WHERE status = 'active' AND (address IS NOT NULL OR url IS NOT NULL)").all();
                         nodesList = nodesList.concat(nRes.results || []);
                     } catch(e) {}
                 }
@@ -643,7 +688,17 @@ export default {
                 const allowTrojan = targetMode === "beta" || targetMode === "both";
 
                 let cfgIndex = 0;
-            for (const target of nodeTargets) {
+            const { results: nRows } = await env.IOT_DB.prepare("SELECT * FROM nodes WHERE status = 'active' AND (address IS NOT NULL OR url IS NOT NULL)").all();
+    if (nRows && nRows.length > 0) {
+        nodeTargets = nRows.map(n => ({
+            ...n,
+            name: n.name || "Edge",
+            host: (n.address || n.url || "").replace(/^https?:\/\//, "").split("/")[0].trim(),
+            path: "vl",
+            isNode: true
+        })).filter(n => n.host.length > 0);
+    }
+    for (const target of nodeTargets) {
                     const endpoints = userCleanIPs.length > 0 ? userCleanIPs : [{ ip: target.host, name: "Direct" }];
 
                     for (const ep of endpoints) {
@@ -1201,7 +1256,7 @@ export default {
                 `).all();
                 const computedNodes = (results || []).map(n => ({
                     ...n,
-                    address: n.url,
+                    address: n.address || n.url,
                     total_bytes: Number(n.total_bytes || 0),
                     is_online: n.last_seen > 0 && (Math.floor(Date.now() / 1000) - n.last_seen) < 300 && n.status === "active", country: (n.country && n.country.length === 2 ? (n.country.toUpperCase()) : "US"), flag: getCountryFlag(n.country || "US")
                 }));

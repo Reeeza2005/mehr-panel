@@ -1323,17 +1323,55 @@ export default {
                 `).bind(nodeId, nodeName, nodeUrl, nodeKey, now, nodeCountry, reqDelta, todayStr, now).run();
 
                 if (b.user_traffic && Array.isArray(b.user_traffic)) {
-                    for (const report of b.user_traffic) {
-                        const delta = (report.up || 0) + (report.down || 0);
-                        if (delta > 0 && report.uuid) {
-                            await env.IOT_DB.prepare(
-                                "UPDATE users SET used_traffic = COALESCE(used_traffic, 0) + ? WHERE uuid = ?"
-                            ).bind(delta, report.uuid).run();
-                        }
-                    }
-                }
+            // ۱. بارگذاری کش مصرف سیستمی جهت نمایش زنده در داشبورد
+            if (!sysUsageCache) sysUsageCache = { users: {} };
+            if (!sysUsageCache.users) sysUsageCache.users = {};
+            const todayStr = new Date().toISOString().split("T")[0];
 
-                const { results: blocked } = await env.IOT_DB.prepare(
+            for (const report of b.user_traffic) {
+                const uUp = Number(report.up || 0);
+                const uDown = Number(report.down || 0);
+                const deltaBytes = uUp + uDown;
+                const userUuid = report.uuid;
+
+                // ثبت در دیتابیس D1
+                await env.IOT_DB.prepare(`
+                    INSERT INTO node_traffic (user_uuid, node_id, bytes_uploaded, bytes_downloaded, last_update)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT(user_uuid, node_id) DO UPDATE SET
+                        bytes_uploaded = bytes_uploaded + excluded.bytes_uploaded,
+                        bytes_downloaded = bytes_downloaded + excluded.bytes_downloaded,
+                        last_update = excluded.last_update
+                `).bind(userUuid, nodeId, uUp, uDown, now).run();
+
+                if (deltaBytes > 0) {
+                    await env.IOT_DB.prepare(
+                        "UPDATE users SET used_traffic = used_traffic + ? WHERE uuid = ?"
+                    ).bind(deltaBytes, userUuid).run();
+
+                    // به‌روزرسانی ساختار مصرف کاربری برای فرانت‌اند
+                    const cleanUuid = String(userUuid).replace(/-/g, "").toLowerCase();
+                    if (!sysUsageCache.users[cleanUuid]) {
+                        sysUsageCache.users[cleanUuid] = { reqs: 0, dReqs: 0, bytes: 0, dBytes: 0, lastDay: todayStr };
+                    }
+                    let uStat = sysUsageCache.users[cleanUuid];
+                    if (uStat.lastDay !== todayStr) {
+                        uStat.dReqs = 0;
+                        uStat.dBytes = 0;
+                        uStat.lastDay = todayStr;
+                    }
+                    uStat.bytes = (uStat.bytes || 0) + deltaBytes;
+                    uStat.dBytes = (uStat.dBytes || 0) + deltaBytes;
+                    // تبدیل تخمینی بایت به ریکوئست جهت سازگاری با نمایشگرهای داشبورد
+                    const deltaReqs = Math.max(1, Math.round(deltaBytes / (1073741824 / 6000)));
+                    uStat.reqs = (uStat.reqs || 0) + deltaReqs;
+                    uStat.dReqs = (uStat.dReqs || 0) + deltaReqs;
+                }
+            }
+            await cachedD1Put(env, "sys_usage", JSON.stringify(sysUsageCache));
+        }
+
+        const { results: blocked } = await env.IOT_DB.prepare(
                     "SELECT uuid FROM users WHERE status != \"active\" OR (traffic_limit > 0 AND used_traffic >= traffic_limit)"
                 ).all();
 

@@ -429,8 +429,7 @@ export default {
         if (path === "/api/status" || path === "/api/stats") {
             const authHeader = request.headers.get("Authorization") || "";
             const token = authHeader.replace("Bearer ", "").trim();
-            const validKey = env.API_KEY || env.CLUSTER_KEY;
-      if (validKey && token !== validKey) env.API_KEY && token !== env.API_KEYenv.API_KEY && token !== env.API_KEY token !== (env.API_KEY || env.CLUSTER_KEY)) {
+            if (env.API_KEY && token !== env.API_KEY) {
                 return new Response(JSON.stringify({ error: "Unauthorized" }), {
                     status: 401,
                     headers: { "Content-Type": "application/json", ...corsHeaders }
@@ -451,8 +450,7 @@ export default {
         if (false) {
             const authHeader = request.headers.get("Authorization") || "";
             const token = authHeader.replace("Bearer ", "").trim();
-            const validKey = env.API_KEY || env.CLUSTER_KEY;
-      if (validKey && token !== validKey) env.API_KEY && token !== env.API_KEYenv.API_KEY && token !== env.API_KEY token !== (env.API_KEY || env.CLUSTER_KEY)) {
+            if (env.API_KEY && token !== env.API_KEY) {
                 return new Response(JSON.stringify({ error: "Unauthorized" }), {
                     status: 401,
                     headers: { "Content-Type": "application/json" }

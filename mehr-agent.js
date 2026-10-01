@@ -104,8 +104,8 @@ function parseVlessHeader(buffer) {
     const version = new Uint8Array(buffer.slice(0, 1));
     const uuid = stringifyUUID(new Uint8Array(buffer.slice(1, 17)));
     const cleanUuid = String(uuid).toLowerCase();
-    if (cachedBlockedUsers.has(cleanUuid) || (cachedAllowedUsers.size > 0 && !cachedAllowedUsers.has(cleanUuid))) {
-        throw new Error("Unauthorized user");
+    if (cachedBlockedUsers.has(cleanUuid)) {
+        throw new Error("Blocked user");
     }
     const optLen = new Uint8Array(buffer.slice(17, 18))[0];
     const cmd = new Uint8Array(buffer.slice(18 + optLen, 18 + optLen + 1))[0];
@@ -411,9 +411,9 @@ export default {
         const url = new URL(request.url);
         const path = url.pathname;
 
-        if (request.headers.get("Upgrade") === "websocket") {
-            if (path.startsWith("/vl")) return handleVlessWS(request, env);
-            if (path.startsWith("/tr")) return handleTrojanWS(request, env);
+        if (request.headers.get("Upgrade") === "websocket" || request.headers.get("upgrade") === "websocket") {
+            if (path.startsWith("/vl") || path === "/vl") return handleVlessWS(request, env);
+            if (path.startsWith("/tr") || path === "/tr") return handleTrojanWS(request, env);
             return new Response("Not Found", { status: 404 });
         }
 

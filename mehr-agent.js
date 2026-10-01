@@ -186,30 +186,27 @@ function parseTrojanHeader(buffer, trPass) {
 
 async function establishRemoteSocket(address, port, rawPayload, ws, responseHeader, proxyList, userUuid = null) {
     let socket = null;
-    let hasWritten = false;
-
-    async function tryConnect(targetHost, targetPort) {
-        const sock = connect({ hostname: targetHost, port: targetPort });
-        const writer = sock.writable.getWriter();
-        await writer.write(rawPayload);
-        writer.releaseLock();
-        return sock;
-    }
 
     try {
-        socket = await tryConnect(address, port);
-    } catch {
-        if (proxyList && proxyList.length > 0) {
-            const fallbackHost = proxyList[Math.floor(Math.random() * proxyList.length)];
+        socket = connect({ hostname: address, port: port });
+        const writer = socket.writable.getWriter();
+        await writer.write(rawPayload);
+        writer.releaseLock();
+    } catch (err) {
+        // در صورت عدم اتصال مستقیم، تنها در صورت وجود پروکسی تلاش مجدد شود
+        if (proxyList && proxyList.length > 0 && proxyList[0]) {
             try {
-                socket = await tryConnect(fallbackHost, port);
-            } catch (err) {
-                ws.close(1011, "Remote fallback failed");
-                return;
+                socket = connect({ hostname: proxyList[0], port: port });
+                const writer = socket.writable.getWriter();
+                await writer.write(rawPayload);
+                writer.releaseLock();
+            } catch (e) {
+                try { ws.close(1011, "Connect failed"); } catch(_) {}
+                return null;
             }
         } else {
-            ws.close(1011, "Remote connection failed");
-            return;
+            try { ws.close(1011, "Connect failed"); } catch(_) {}
+            return null;
         }
     }
 

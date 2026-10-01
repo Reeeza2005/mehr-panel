@@ -9,22 +9,30 @@ var pendingRequestsCount = 0;
 var pendingUserTraffic = new Map();
 var detectedCountry = "";
 
-// همگام‌‌سازی سبک با پنل مستر بدون اختلال در ترافیک
-async function syncWithMaster(env, request) {
+// همگام‌‌سازی زنده با پنل مستر
+async function syncWithMaster(env, request, force = false) {
   try {
     if (request?.cf?.country) {
       detectedCountry = request.cf.country;
     }
     const now = Date.now();
-    if (now - lastSyncTime < 25000 && pendingRequestsCount < 15) {
+
+    // محاسبه کل ترافیک انباشته
+    let totalPendingBytes = 0;
+    for (const tr of pendingUserTraffic.values()) {
+      totalPendingBytes += (tr.up || 0) + (tr.down || 0);
+    }
+
+    // اگر اجباری نباشد، زمان کم باشد و دیتای محسوسی نیامده باشد، خارج شو
+    if (!force && (now - lastSyncTime < 15000) && totalPendingBytes < 1048576 && pendingRequestsCount < 5) {
       return;
     }
 
     const panelUrl = env.PANEL_URL;
-    const nodeKey = env.API_KEY || env.CLUSTER_KEY;
+    const nodeKey = env.API_KEY || env.CLUSTER_KEY || env.NODE_KEY;
     if (!panelUrl || !nodeKey) return;
 
-    const reqsToSend = pendingRequestsCount > 0 ? pendingRequestsCount : 1;
+    const reqsToSend = pendingRequestsCount > 0 ? pendingRequestsCount : (totalPendingBytes > 0 ? 1 : 0);
     const trafficSnapshot = [];
     for (const [uuid, tr] of pendingUserTraffic.entries()) {
       if (tr.up > 0 || tr.down > 0) {
@@ -32,8 +40,12 @@ async function syncWithMaster(env, request) {
       }
     }
 
+    if (trafficSnapshot.length === 0 && reqsToSend === 0 && !force) {
+      return;
+    }
+
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 2000);
+    const timer = setTimeout(() => controller.abort(), 3000);
 
     const res = await fetch(`${panelUrl.replace(/\/+$/, "")}/api/node/sync`, {
       method: "POST",
@@ -197,11 +209,10 @@ function parseVlessHeader(buffer) {
   };
 }
 
-async function establishSocketWithProxy(socketHolder, targetHost, targetPort, rawPayload, ws, responseHeader, userUuid, env) {
+async function establishSocketWithProxy(socketHolder, targetHost, targetPort, rawPayload, ws, responseHeader, userUuid, env, ctx, request) {
   let sock = null;
   const proxyIP = env?.PROXY_IP || DEFAULT_PROXY_IP;
 
-  // مرحله ۱: تلاش اول برای اتصال مستقیم به هاست واقعی (ضروری برای تست پینگ کلاینت)
   try {
     sock = connect({ hostname: targetHost, port: targetPort });
     socketHolder.value = sock;
@@ -212,7 +223,6 @@ async function establishSocketWithProxy(socketHolder, targetHost, targetPort, ra
       writer.releaseLock();
     }
   } catch (directErr) {
-    // مرحله ۲: سوییچ خودکار به Proxy IP در صورت مسدود بودن اتصال مستقیم
     try {
       if (proxyIP) {
         sock = connect({ hostname: proxyIP, port: targetPort === 443 ? 443 : 80 });
@@ -249,17 +259,24 @@ async function establishSocketWithProxy(socketHolder, targetHost, targetPort, ra
         ws.send(chunk);
       }
     },
-    close() { try { sock.close(); } catch {} },
-    abort() { try { sock.close(); } catch {} }
+    close() { 
+      try { sock.close(); } catch {}
+      if (ctx?.waitUntil) ctx.waitUntil(syncWithMaster(env, request, true));
+    },
+    abort() { 
+      try { sock.close(); } catch {}
+      if (ctx?.waitUntil) ctx.waitUntil(syncWithMaster(env, request, true));
+    }
   });
 
   sock.readable.pipeTo(wsWriter).catch(() => {
     try { sock.close(); } catch {}
     safeCloseWebSocket(ws);
+    if (ctx?.waitUntil) ctx.waitUntil(syncWithMaster(env, request, true));
   });
 }
 
-function handleVlessWS(request, env) {
+function handleVlessWS(request, env, ctx) {
   const pair = new WebSocketPair();
   const [clientWs, serverWs] = Object.values(pair);
   serverWs.accept();
@@ -309,17 +326,21 @@ function handleVlessWS(request, env) {
         serverWs,
         vlessResponseHeader,
         currentUserUuid,
-        env
+        env,
+        ctx,
+        request
       );
     },
     close() {
       if (socketHolder.value) try { socketHolder.value.close(); } catch {}
+      if (ctx?.waitUntil) ctx.waitUntil(syncWithMaster(env, request, true));
     }
   });
 
   readableStream.pipeTo(writableStream).catch(() => {
     if (socketHolder.value) try { socketHolder.value.close(); } catch {}
     safeCloseWebSocket(serverWs);
+    if (ctx?.waitUntil) ctx.waitUntil(syncWithMaster(env, request, true));
   });
 
   return new Response(null, { status: 101, webSocket: clientWs });
@@ -334,10 +355,7 @@ export default {
 
     if (isWebSocket) {
       pendingRequestsCount++;
-      if (ctx && ctx.waitUntil) {
-        ctx.waitUntil(syncWithMaster(env, request).catch(() => {}));
-      }
-      return handleVlessWS(request, env);
+      return handleVlessWS(request, env, ctx);
     }
 
     if (path === "/vl" || path.startsWith("/vl/") || path === "/vless") {

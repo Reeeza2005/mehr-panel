@@ -46,6 +46,8 @@ async function syncWithMaster(env, request) {
         node_id: env.NODE_ID || "nod-4",
         timestamp: now,
         requests_count: reqsToSend,
+        requests_delta: reqsToSend,
+        requests: reqsToSend,
         country: detectedCountry || "XX",
         user_traffic: trafficSnapshot
       }),

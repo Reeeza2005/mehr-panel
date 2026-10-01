@@ -283,7 +283,8 @@ function handleVlessWS(request, env) {
             }
 
             const header = parseVlessHeader(chunk);
-            const respHeader = new Uint8Array([header.version[0], 0]);
+            serverWs.send(new Uint8Array([header.version[0], 0]));
+            const respHeader = null;
             currentUserUuid = header.uuid;
             if (header.rawData && header.rawData.byteLength > 0 && currentUserUuid) {
                 const uStat = pendingUserTraffic.get(currentUserUuid) || { up: 0, down: 0 };

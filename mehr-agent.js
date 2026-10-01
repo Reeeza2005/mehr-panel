@@ -1,51 +1,60 @@
 import { connect } from "cloudflare:sockets";
 
+const DEFAULT_PROXY_IP = "134.209.136.197";
+
 var cachedAllowedUsers = new Set();
 var cachedBlockedUsers = new Set();
 var lastSyncTime = 0;
-var totalWorkerRequests = 0;
 var pendingRequestsCount = 0;
 var pendingUserTraffic = new Map();
 var detectedCountry = "";
 
+// همگام‌‌سازی سبک با پنل مستر بدون اختلال در ترافیک
 async function syncWithMaster(env, request) {
-  if (request && request.cf && request.cf.country) {
-    detectedCountry = request.cf.country;
-  }
-  const now = Date.now();
-  if (now - lastSyncTime < 20000 && pendingRequestsCount < 15 && (cachedAllowedUsers.size > 0 || cachedBlockedUsers.size > 0)) {
-    return;
-  }
-
-  const panelUrl = env.PANEL_URL;
-  const clusterKey = env.CLUSTER_KEY;
-  if (!panelUrl || !clusterKey) return;
-
-  const reqsToSend = pendingRequestsCount > 0 ? pendingRequestsCount : 1;
   try {
+    if (request?.cf?.country) {
+      detectedCountry = request.cf.country;
+    }
+    const now = Date.now();
+    if (now - lastSyncTime < 25000 && pendingRequestsCount < 15) {
+      return;
+    }
+
+    const panelUrl = env.PANEL_URL;
+    const nodeKey = env.API_KEY || env.CLUSTER_KEY;
+    if (!panelUrl || !nodeKey) return;
+
+    const reqsToSend = pendingRequestsCount > 0 ? pendingRequestsCount : 1;
     const trafficSnapshot = [];
     for (const [uuid, tr] of pendingUserTraffic.entries()) {
       if (tr.up > 0 || tr.down > 0) {
-        trafficSnapshot.push({ uuid, up: tr.up, down: tr.down });
+        trafficSnapshot.push({ uuid, up: Number(tr.up) || 0, down: Number(tr.down) || 0 });
       }
     }
 
-    const res = await fetch(`${panelUrl}/api/node/sync`, {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 2000);
+
+    const res = await fetch(`${panelUrl.replace(/\/+$/, "")}/api/node/sync`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Node-Key": clusterKey
+        "X-Node-Key": nodeKey,
+        "Authorization": `Bearer ${nodeKey}`
       },
       body: JSON.stringify({
-        node_id: env.NODE_ID || "edge-node",
+        node_id: env.NODE_ID || "nod-4",
         timestamp: now,
         requests_count: reqsToSend,
-        country: detectedCountry || request?.cf?.country || "",
+        country: detectedCountry || "XX",
         user_traffic: trafficSnapshot
-      })
-    });
+      }),
+      signal: controller.signal
+    }).catch(() => null);
 
-    if (res.ok) {
+    clearTimeout(timer);
+
+    if (res && res.ok) {
       for (const item of trafficSnapshot) {
         const cur = pendingUserTraffic.get(item.uuid);
         if (cur) {
@@ -57,24 +66,18 @@ async function syncWithMaster(env, request) {
       pendingRequestsCount = Math.max(0, pendingRequestsCount - reqsToSend);
       lastSyncTime = now;
 
-      const data = await res.json();
-      if (Array.isArray(data.allowed_uuids)) {
-        cachedAllowedUsers = new Set(data.allowed_uuids.map(x => String(x).toLowerCase()));
-      }
-      if (Array.isArray(data.blocked_uuids)) {
-        cachedBlockedUsers = new Set(data.blocked_uuids.map(x => String(x).toLowerCase()));
+      const data = await res.json().catch(() => null);
+      if (data) {
+        if (Array.isArray(data.allowed_uuids)) {
+          cachedAllowedUsers = new Set(data.allowed_uuids.map(x => String(x).toLowerCase()));
+        }
+        if (Array.isArray(data.blocked_uuids)) {
+          cachedBlockedUsers = new Set(data.blocked_uuids.map(x => String(x).toLowerCase()));
+        }
       }
     }
   } catch (e) {}
 }
-
-const DEFAULT_PROXY_IPS = [
-  "proxyip.multisite.ir",
-  "cdn.discordapp.com",
-  "cdnjs.cloudflare.com",
-  "104.16.132.229",
-  "104.16.133.229"
-];
 
 function stringifyUUID(bytes) {
   const hex = [];
@@ -89,87 +92,144 @@ function stringifyUUID(bytes) {
 }
 
 function parseEarlyData(header) {
-  if (!header) return null;
+  if (!header) return { earlyData: null, error: null };
   try {
     const clean = header.replace(/-/g, "+").replace(/_/g, "/");
     const binary = atob(clean);
-    return Uint8Array.from(binary, c => c.charCodeAt(0)).buffer;
-  } catch {
-    return null;
+    return { earlyData: Uint8Array.from(binary, c => c.charCodeAt(0)).buffer, error: null };
+  } catch (e) {
+    return { earlyData: null, error: e };
   }
 }
 
-function parseVlessHeader(buffer) {
-  if (buffer.byteLength < 24) throw new Error("Invalid VLESS header length");
-  const version = new Uint8Array(buffer.slice(0, 1));
-  const uuid = stringifyUUID(new Uint8Array(buffer.slice(1, 17)));
-  const cleanUuid = String(uuid).toLowerCase();
+function safeCloseWebSocket(ws) {
+  try {
+    if (ws.readyState === 1 || ws.readyState === 2) ws.close();
+  } catch (e) {}
+}
 
-  if (cachedBlockedUsers.size > 0 && cachedBlockedUsers.has(cleanUuid)) {
-    throw new Error("User blocked");
+function makeWebSocketReadableStream(ws, earlyDataHeader) {
+  let isClosed = false;
+  return new ReadableStream({
+    start(controller) {
+      ws.addEventListener("message", async e => {
+        if (!isClosed) {
+          let data = e.data;
+          if (data instanceof Blob) {
+            data = await data.arrayBuffer();
+          }
+          controller.enqueue(data);
+        }
+      });
+      ws.addEventListener("close", () => {
+        safeCloseWebSocket(ws);
+        if (!isClosed) controller.close();
+      });
+      ws.addEventListener("error", err => {
+        if (!isClosed) controller.error(err);
+      });
+      const { earlyData, error } = parseEarlyData(earlyDataHeader);
+      if (error) controller.error(error);
+      else if (earlyData) controller.enqueue(earlyData);
+    },
+    cancel() {
+      isClosed = true;
+      safeCloseWebSocket(ws);
+    }
+  });
+}
+
+function parseVlessHeader(buffer) {
+  let ab = buffer;
+  if (buffer instanceof Uint8Array || ArrayBuffer.isView(buffer)) {
+    ab = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
   }
 
-  const optLen = new Uint8Array(buffer.slice(17, 18))[0];
-  const cmd = new Uint8Array(buffer.slice(18 + optLen, 18 + optLen + 1))[0];
+  if (ab.byteLength < 24) return { hasError: true, message: "invalid data" };
+
+  const view = new DataView(ab);
+  const version = new Uint8Array(ab.slice(0, 1));
+  const rawUuid = stringifyUUID(new Uint8Array(ab.slice(1, 17)));
+  const cleanUuid = String(rawUuid).toLowerCase();
+
+  if (cachedBlockedUsers.size > 0 && cachedBlockedUsers.has(cleanUuid)) {
+    return { hasError: true, message: "user blocked" };
+  }
+
+  const optLen = new Uint8Array(ab.slice(17, 18))[0];
+  const cmd = new Uint8Array(ab.slice(18 + optLen, 18 + optLen + 1))[0];
   const isUDP = cmd === 2;
   const portIdx = 18 + optLen + 1;
-  const port = new DataView(buffer.slice(portIdx, portIdx + 2)).getUint16(0);
+  const port = view.getUint16(portIdx);
   const addrIdx = portIdx + 2;
-  const addrType = new Uint8Array(buffer.slice(addrIdx, addrIdx + 1))[0];
+  const addrType = new Uint8Array(ab.slice(addrIdx, addrIdx + 1))[0];
   let offset = addrIdx + 1;
   let address = "";
 
   if (addrType === 1) {
-    address = new Uint8Array(buffer.slice(offset, offset + 4)).join(".");
+    address = new Uint8Array(ab.slice(offset, offset + 4)).join(".");
     offset += 4;
   } else if (addrType === 2) {
-    const domainLen = new Uint8Array(buffer.slice(offset, offset + 1))[0];
+    const domainLen = new Uint8Array(ab.slice(offset, offset + 1))[0];
     offset += 1;
-    address = new TextDecoder().decode(buffer.slice(offset, offset + domainLen));
+    address = new TextDecoder().decode(ab.slice(offset, offset + domainLen));
     offset += domainLen;
   } else if (addrType === 3) {
-    const view = new DataView(buffer.slice(offset, offset + 16));
     const parts = [];
-    for (let i = 0; i < 8; i++) parts.push(view.getUint16(i * 2).toString(16));
+    for (let i = 0; i < 8; i++) parts.push(view.getUint16(offset + (i * 2)).toString(16));
     address = parts.join(":");
     offset += 16;
   } else {
-    throw new Error(`Unsupported address type: ${addrType}`);
+    return { hasError: true, message: "invalid address type" };
   }
 
-  return { uuid: cleanUuid, port, address, rawData: buffer.slice(offset), version, isUDP };
+  return {
+    hasError: false,
+    uuid: cleanUuid,
+    addressRemote: address,
+    portRemote: port,
+    rawDataIndex: offset,
+    VLVersion: version,
+    isUDP,
+    rawBuffer: ab
+  };
 }
 
-async function establishRemoteSocket(address, port, rawPayload, ws, initialResponseHeader, proxyList, userUuid) {
-  async function connectTarget(host, targetPort) {
-    const sock = connect({ hostname: host, port: targetPort });
+async function establishSocketWithProxy(socketHolder, targetHost, targetPort, rawPayload, ws, responseHeader, userUuid, env) {
+  let sock = null;
+  const proxyIP = env?.PROXY_IP || DEFAULT_PROXY_IP;
+
+  // مرحله ۱: تلاش اول برای اتصال مستقیم به هاست واقعی (ضروری برای تست پینگ کلاینت)
+  try {
+    sock = connect({ hostname: targetHost, port: targetPort });
+    socketHolder.value = sock;
+
     if (rawPayload && rawPayload.byteLength > 0) {
       const writer = sock.writable.getWriter();
       await writer.write(rawPayload);
       writer.releaseLock();
     }
-    return sock;
-  }
-
-  let socket = null;
-  try {
-    socket = await connectTarget(address, port);
-  } catch (err) {
-    if (proxyList && proxyList.length > 0) {
-      const fallbackHost = proxyList[Math.floor(Math.random() * proxyList.length)];
-      try {
-        socket = await connectTarget(fallbackHost, port);
-      } catch (fErr) {
-        try { ws.close(1011, "Remote fallback unreachable"); } catch {}
-        return null;
+  } catch (directErr) {
+    // مرحله ۲: سوییچ خودکار به Proxy IP در صورت مسدود بودن اتصال مستقیم
+    try {
+      if (proxyIP) {
+        sock = connect({ hostname: proxyIP, port: targetPort === 443 ? 443 : 80 });
+        socketHolder.value = sock;
+        if (rawPayload && rawPayload.byteLength > 0) {
+          const writer = sock.writable.getWriter();
+          await writer.write(rawPayload);
+          writer.releaseLock();
+        }
+      } else {
+        throw directErr;
       }
-    } else {
-      try { ws.close(1011, "Remote target unreachable"); } catch {}
-      return null;
+    } catch (proxyErr) {
+      safeCloseWebSocket(ws);
+      return;
     }
   }
 
-  let sentRespHeader = !initialResponseHeader;
+  let headerToSend = responseHeader;
   const wsWriter = new WritableStream({
     async write(chunk) {
       if (ws.readyState !== 1) return;
@@ -180,30 +240,21 @@ async function establishRemoteSocket(address, port, rawPayload, ws, initialRespo
         pendingUserTraffic.set(userUuid, uStat);
       }
 
-      if (!sentRespHeader && initialResponseHeader) {
-        const combined = new Uint8Array(initialResponseHeader.byteLength + (chunk.byteLength || chunk.length || 0));
-        combined.set(new Uint8Array(initialResponseHeader), 0);
-        combined.set(new Uint8Array(chunk), initialResponseHeader.byteLength);
-        ws.send(combined.buffer);
-        sentRespHeader = true;
+      if (headerToSend) {
+        ws.send(await new Blob([headerToSend, chunk]).arrayBuffer());
+        headerToSend = null;
       } else {
         ws.send(chunk);
       }
     },
-    close() {
-      try { socket.close(); } catch {}
-    },
-    abort() {
-      try { socket.close(); } catch {}
-    }
+    close() { try { sock.close(); } catch {} },
+    abort() { try { sock.close(); } catch {} }
   });
 
-  socket.readable.pipeTo(wsWriter).catch(() => {
-    try { socket.close(); } catch {}
-    try { ws.close(); } catch {}
+  sock.readable.pipeTo(wsWriter).catch(() => {
+    try { sock.close(); } catch {}
+    safeCloseWebSocket(ws);
   });
-
-  return socket;
 }
 
 function handleVlessWS(request, env) {
@@ -211,148 +262,100 @@ function handleVlessWS(request, env) {
   const [clientWs, serverWs] = Object.values(pair);
   serverWs.accept();
 
-  const earlyData = parseEarlyData(request.headers.get("sec-websocket-protocol"));
-  let remoteSocket = null;
+  const earlyDataHeader = request.headers.get("sec-websocket-protocol") || "";
+  const readableStream = makeWebSocketReadableStream(serverWs, earlyDataHeader);
+
+  let socketHolder = { value: null };
   let currentUserUuid = null;
 
-  const clientStream = new ReadableStream({
-    start(controller) {
-      serverWs.addEventListener("message", e => controller.enqueue(e.data));
-      serverWs.addEventListener("close", () => {
-        if (remoteSocket) try { remoteSocket.close(); } catch {}
-        controller.close();
-      });
-      serverWs.addEventListener("error", err => controller.error(err));
-      if (earlyData) controller.enqueue(earlyData);
-    }
-  });
-
-  const pipeSink = new WritableStream({
+  const writableStream = new WritableStream({
     async write(chunk) {
-      if (remoteSocket) {
+      if (socketHolder.value) {
         const sz = chunk.byteLength || chunk.length || 0;
         if (currentUserUuid && sz > 0) {
           const uStat = pendingUserTraffic.get(currentUserUuid) || { up: 0, down: 0 };
           uStat.up += sz;
           pendingUserTraffic.set(currentUserUuid, uStat);
         }
-        const writer = remoteSocket.writable.getWriter();
+        const writer = socketHolder.value.writable.getWriter();
         await writer.write(chunk);
         writer.releaseLock();
         return;
       }
 
-      const header = parseVlessHeader(chunk);
-      currentUserUuid = header.uuid;
+      const parsed = parseVlessHeader(chunk);
+      if (parsed.hasError) {
+        safeCloseWebSocket(serverWs);
+        return;
+      }
 
-      if (header.rawData && header.rawData.byteLength > 0 && currentUserUuid) {
+      currentUserUuid = parsed.uuid;
+      const vlessResponseHeader = new Uint8Array([parsed.VLVersion[0], 0]);
+      const rawPayload = parsed.rawBuffer.slice(parsed.rawDataIndex);
+
+      if (rawPayload && rawPayload.byteLength > 0 && currentUserUuid) {
         const uStat = pendingUserTraffic.get(currentUserUuid) || { up: 0, down: 0 };
-        uStat.up += header.rawData.byteLength;
+        uStat.up += rawPayload.byteLength;
         pendingUserTraffic.set(currentUserUuid, uStat);
       }
 
-      const vlessResponseHeader = new Uint8Array([header.version[0], 0]);
-
-      remoteSocket = await establishRemoteSocket(
-        header.address,
-        header.port,
-        header.rawData,
+      await establishSocketWithProxy(
+        socketHolder,
+        parsed.addressRemote,
+        parsed.portRemote,
+        rawPayload,
         serverWs,
         vlessResponseHeader,
-        DEFAULT_PROXY_IPS,
-        currentUserUuid
+        currentUserUuid,
+        env
       );
     },
     close() {
-      if (remoteSocket) try { remoteSocket.close(); } catch {}
+      if (socketHolder.value) try { socketHolder.value.close(); } catch {}
     }
   });
 
-  clientStream.pipeTo(pipeSink).catch(() => {
-    if (remoteSocket) try { remoteSocket.close(); } catch {}
-    try { serverWs.close(); } catch {}
+  readableStream.pipeTo(writableStream).catch(() => {
+    if (socketHolder.value) try { socketHolder.value.close(); } catch {}
+    safeCloseWebSocket(serverWs);
   });
 
   return new Response(null, { status: 101, webSocket: clientWs });
 }
 
-async function serveMaintenancePage(request, url) {
-  const fakeList = ["https://www.ubuntu.com", "https://www.docker.com"];
-  const clientIP = request.headers.get("cf-connecting-ip") || "0.0.0.0";
-  const ipHash = Array.from(clientIP).reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  const targetStr = fakeList[ipHash % fakeList.length];
-  try {
-    const targetUrl = new URL(targetStr);
-    if (url.pathname !== "/") targetUrl.pathname = url.pathname;
-    targetUrl.search = url.search;
-    const cleanHeaders = new Headers(request.headers);
-    cleanHeaders.set("Host", targetUrl.hostname);
-    cleanHeaders.delete("cf-connecting-ip");
-    cleanHeaders.delete("x-forwarded-for");
-    const fetchInit = {
-      method: request.method,
-      headers: cleanHeaders,
-      redirect: "follow"
-    };
-    if (request.method !== "GET" && request.method !== "HEAD") {
-      fetchInit.body = request.body;
-    }
-    return await fetch(new Request(targetUrl.toString(), fetchInit));
-  } catch (e) {
-    return new Response("Service Unavailable", { status: 503 });
-  }
-}
-
 export default {
   async fetch(request, env, ctx) {
-    totalWorkerRequests++;
-    pendingRequestsCount++;
-    ctx.waitUntil(syncWithMaster(env, request));
-
     const url = new URL(request.url);
     const path = url.pathname.toLowerCase();
-    const upgradeHeader = (request.headers.get("Upgrade") || "").toLowerCase();
+    const upgradeHeader = request.headers.get("Upgrade") || request.headers.get("upgrade") || "";
+    const isWebSocket = upgradeHeader.toLowerCase() === "websocket";
 
-    if (upgradeHeader === "websocket") {
-      if (path === "/" || path.startsWith("/vl") || path.includes("vless")) {
-        return handleVlessWS(request, env);
+    if (isWebSocket) {
+      pendingRequestsCount++;
+      if (ctx && ctx.waitUntil) {
+        ctx.waitUntil(syncWithMaster(env, request).catch(() => {}));
       }
-      return new Response("WebSocket Protocol Mismatch", { status: 400 });
+      return handleVlessWS(request, env);
     }
 
-    const corsHeaders = {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Authorization, Content-Type"
-    };
-
-    if (request.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: corsHeaders });
-    }
-
-    if (path === "/api/status" || path === "/api/stats") {
-      const authHeader = request.headers.get("Authorization") || "";
-      const token = authHeader.replace("Bearer ", "").trim();
-      if (env.API_KEY && token !== env.API_KEY) {
-        return new Response(JSON.stringify({ error: "Unauthorized" }), {
-          status: 401,
-          headers: { "Content-Type": "application/json", ...corsHeaders }
-        });
-      }
-      return new Response(JSON.stringify({
-        status: "active",
-        role: "edge_node",
-        version: "2.1.0",
-        node_id: env.NODE_ID || "unknown",
-        country: detectedCountry || request.cf?.country || "XX",
-        total_requests: totalWorkerRequests,
-        pending_traffic_users: pendingUserTraffic.size
-      }), {
-        status: 200,
-        headers: { "Content-Type": "application/json", ...corsHeaders }
+    if (path === "/vl" || path.startsWith("/vl/") || path === "/vless") {
+      return new Response("VLESS WebSocket Endpoint - Awaiting Upgrade", {
+        status: 426,
+        headers: { "Upgrade": "websocket" }
       });
     }
 
-    return await serveMaintenancePage(request, url);
+    if (path === "/api/status" || path === "/api/stats") {
+      return new Response(JSON.stringify({
+        status: "active",
+        role: "edge_node",
+        node_id: env.NODE_ID || "nod-4"
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+
+    return new Response("Service Available", { status: 200 });
   }
 };

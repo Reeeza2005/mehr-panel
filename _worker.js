@@ -549,9 +549,6 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
                     expiryInfo = `📅 Expiry: ${d.toISOString().split('T')[0]} (${daysStr})`;
                 }
 
-                vlessConfigs.push(`trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:1080?security=none#${encodeURIComponent(usageInfo)}`);
-                vlessConfigs.push(`trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:1080?security=none#${encodeURIComponent(expiryInfo)}`);
-
                 // 2. استخراج لیست آی‌پی‌های تمیز (Clean IPs)
                 let rawCleanIps = userRecord.cleanIp || (sysConfig && sysConfig.cleanIps) || "";
                 let cleanEntries = [];
@@ -688,18 +685,9 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
                 const allowTrojan = targetMode === "beta" || targetMode === "both";
 
                 let cfgIndex = 0;
-            const { results: nRows } = await env.IOT_DB.prepare("SELECT * FROM nodes WHERE status = 'active' AND (address IS NOT NULL OR url IS NOT NULL)").all();
-    if (nRows && nRows.length > 0) {
-        nodeTargets = nRows.map(n => ({
-            ...n,
-            name: n.name || "Edge",
-            host: (n.address || n.url || "").replace(/^https?:\/\//, "").split("/")[0].trim(),
-            path: "vl",
-            isNode: true
-        })).filter(n => n.host.length > 0);
-    }
+            
     for (const target of nodeTargets) {
-                    const endpoints = userCleanIPs.length > 0 ? userCleanIPs : [{ ip: target.host, name: "Direct" }];
+                    const endpoints = cleanEntries.length > 0 ? cleanEntries : [{ ip: target.host, name: "Direct" }];
 
                     for (const ep of endpoints) {
                         for (const port of userPortsList) {

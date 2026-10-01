@@ -245,6 +245,9 @@ async function establishRemoteSocket(address, port, rawPayload, ws, responseHead
 }
 
 function handleVlessWS(request, env) {
+  const edHeader = request.headers.get("sec-websocket-protocol");
+  console.log("--> handleVlessWS entered | EarlyData Header:", edHeader ? "YES" : "NO");
+
     const pair = new WebSocketPair();
     const [clientWs, serverWs] = Object.values(pair);
     serverWs.accept();

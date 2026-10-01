@@ -3,6 +3,7 @@ import { connect } from "cloudflare:sockets";
 var cachedAllowedUsers = new Set();
 var cachedBlockedUsers = new Set();
 var lastSyncTime = 0;
+var totalWorkerRequests = 0;
 var pendingRequestsCount = 0;
 var pendingUserTraffic = new Map();
 var detectedCountry = "";
@@ -12,17 +13,23 @@ async function syncWithMaster(env, request) {
     detectedCountry = request.cf.country;
   }
   const now = Date.now();
-  if (now - lastSyncTime < 30000 && pendingRequestsCount < 10 && (cachedAllowedUsers.size > 0 || cachedBlockedUsers.size > 0)) return;
+  if (now - lastSyncTime < 20000 && pendingRequestsCount < 15 && (cachedAllowedUsers.size > 0 || cachedBlockedUsers.size > 0)) {
+    return;
+  }
+
+  const panelUrl = env.PANEL_URL;
+  const clusterKey = env.CLUSTER_KEY;
+  if (!panelUrl || !clusterKey) return;
+
   const reqsToSend = pendingRequestsCount > 0 ? pendingRequestsCount : 1;
-  const panelUrl = env.PANEL_URL || "https://mehr.v5twycq1o.workers.dev";
-  const clusterKey = env.CLUSTER_KEY || "mehr_cluster_secret_2026";
   try {
     const trafficSnapshot = [];
-    for (const [u, tr] of pendingUserTraffic.entries()) {
+    for (const [uuid, tr] of pendingUserTraffic.entries()) {
       if (tr.up > 0 || tr.down > 0) {
-        trafficSnapshot.push({ uuid: u, up: tr.up, down: tr.down });
+        trafficSnapshot.push({ uuid, up: tr.up, down: tr.down });
       }
     }
+
     const res = await fetch(`${panelUrl}/api/node/sync`, {
       method: "POST",
       headers: {
@@ -37,31 +44,31 @@ async function syncWithMaster(env, request) {
         user_traffic: trafficSnapshot
       })
     });
+
     if (res.ok) {
       for (const item of trafficSnapshot) {
-        const current = pendingUserTraffic.get(item.uuid);
-        if (current) {
-          current.up = Math.max(0, current.up - item.up);
-          current.down = Math.max(0, current.down - item.down);
-          if (current.up === 0 && current.down === 0) pendingUserTraffic.delete(item.uuid);
+        const cur = pendingUserTraffic.get(item.uuid);
+        if (cur) {
+          cur.up = Math.max(0, cur.up - item.up);
+          cur.down = Math.max(0, cur.down - item.down);
+          if (cur.up === 0 && cur.down === 0) pendingUserTraffic.delete(item.uuid);
         }
       }
-      pendingRequestsCount = 0;
-      const data = await res.json();
-      if (data.allowed_uuids && Array.isArray(data.allowed_uuids)) {
-        cachedAllowedUsers = new Set(data.allowed_uuids.map((x) => String(x).toLowerCase()));
-      }
-      if (data.blocked_uuids && Array.isArray(data.blocked_uuids)) {
-        cachedBlockedUsers = new Set(data.blocked_uuids.map((x) => String(x).toLowerCase()));
-      }
-      lastSyncTime = now;
       pendingRequestsCount = Math.max(0, pendingRequestsCount - reqsToSend);
+      lastSyncTime = now;
+
+      const data = await res.json();
+      if (Array.isArray(data.allowed_uuids)) {
+        cachedAllowedUsers = new Set(data.allowed_uuids.map(x => String(x).toLowerCase()));
+      }
+      if (Array.isArray(data.blocked_uuids)) {
+        cachedBlockedUsers = new Set(data.blocked_uuids.map(x => String(x).toLowerCase()));
+      }
     }
-  } catch (e) {
-  }
+  } catch (e) {}
 }
 
-var DEFAULT_PROXY_IPS = [
+const DEFAULT_PROXY_IPS = [
   "proxyip.multisite.ir",
   "cdn.discordapp.com",
   "cdnjs.cloudflare.com",
@@ -72,7 +79,13 @@ var DEFAULT_PROXY_IPS = [
 function stringifyUUID(bytes) {
   const hex = [];
   for (let i = 0; i < 256; ++i) hex.push((i + 256).toString(16).slice(1));
-  return (hex[bytes[0]] + hex[bytes[1]] + hex[bytes[2]] + hex[bytes[3]] + "-" + hex[bytes[4]] + hex[bytes[5]] + "-" + hex[bytes[6]] + hex[bytes[7]] + "-" + hex[bytes[8]] + hex[bytes[9]] + "-" + hex[bytes[10]] + hex[bytes[11]] + hex[bytes[12]] + hex[bytes[13]] + hex[bytes[14]] + hex[bytes[15]]).toLowerCase();
+  return (
+    hex[bytes[0]] + hex[bytes[1]] + hex[bytes[2]] + hex[bytes[3]] + "-" +
+    hex[bytes[4]] + hex[bytes[5]] + "-" +
+    hex[bytes[6]] + hex[bytes[7]] + "-" +
+    hex[bytes[8]] + hex[bytes[9]] + "-" +
+    hex[bytes[10]] + hex[bytes[11]] + hex[bytes[12]] + hex[bytes[13]] + hex[bytes[14]] + hex[bytes[15]]
+  ).toLowerCase();
 }
 
 function parseEarlyData(header) {
@@ -80,7 +93,7 @@ function parseEarlyData(header) {
   try {
     const clean = header.replace(/-/g, "+").replace(/_/g, "/");
     const binary = atob(clean);
-    return Uint8Array.from(binary, (c) => c.charCodeAt(0)).buffer;
+    return Uint8Array.from(binary, c => c.charCodeAt(0)).buffer;
   } catch {
     return null;
   }
@@ -88,12 +101,12 @@ function parseEarlyData(header) {
 
 function parseVlessHeader(buffer) {
   if (buffer.byteLength < 24) throw new Error("Invalid VLESS header length");
-  const version2 = new Uint8Array(buffer.slice(0, 1));
+  const version = new Uint8Array(buffer.slice(0, 1));
   const uuid = stringifyUUID(new Uint8Array(buffer.slice(1, 17)));
   const cleanUuid = String(uuid).toLowerCase();
-  
+
   if (cachedBlockedUsers.size > 0 && cachedBlockedUsers.has(cleanUuid)) {
-    throw new Error("Blocked user");
+    throw new Error("User blocked");
   }
 
   const optLen = new Uint8Array(buffer.slice(17, 18))[0];
@@ -105,6 +118,7 @@ function parseVlessHeader(buffer) {
   const addrType = new Uint8Array(buffer.slice(addrIdx, addrIdx + 1))[0];
   let offset = addrIdx + 1;
   let address = "";
+
   if (addrType === 1) {
     address = new Uint8Array(buffer.slice(offset, offset + 4)).join(".");
     offset += 4;
@@ -122,76 +136,42 @@ function parseVlessHeader(buffer) {
   } else {
     throw new Error(`Unsupported address type: ${addrType}`);
   }
-  return { uuid, port, address, rawData: buffer.slice(offset), version: version2, isUDP };
+
+  return { uuid: cleanUuid, port, address, rawData: buffer.slice(offset), version, isUDP };
 }
 
-async function parseTrojanHeader(buffer, trPass) {
-  if (buffer.byteLength < 56) throw new Error("Invalid Trojan header length");
-  const enc = new TextEncoder();
-  const passBuf = enc.encode(trPass);
-  const hashBuf = await crypto.subtle.digest("SHA-256", passBuf);
-  const shaPass = Array.from(new Uint8Array(hashBuf)).slice(0, 28).map(b => b.toString(16).padStart(2, "0")).join("");
-  const receivedHash = new TextDecoder().decode(buffer.slice(0, 56));
-  const crlf = new Uint8Array(buffer.slice(56, 58));
-  if (crlf[0] !== 13 || crlf[1] !== 10) throw new Error("Invalid CRLF format");
-  const socksData = buffer.slice(58);
-  const view = new DataView(socksData);
-  const cmd = view.getUint8(0);
-  if (cmd !== 1) throw new Error("Only TCP CONNECT is supported in Trojan");
-  const addrType = view.getUint8(1);
-  let offset = 2;
-  let address = "";
-  if (addrType === 1) {
-    address = new Uint8Array(socksData.slice(offset, offset + 4)).join(".");
-    offset += 4;
-  } else if (addrType === 3) {
-    const domainLen = new Uint8Array(socksData.slice(offset, offset + 1))[0];
-    offset += 1;
-    address = new TextDecoder().decode(socksData.slice(offset, offset + domainLen));
-    offset += domainLen;
-  } else if (addrType === 4) {
-    const v = new DataView(socksData.slice(offset, offset + 16));
-    const parts = [];
-    for (let i = 0; i < 8; i++) parts.push(v.getUint16(i * 2).toString(16));
-    address = parts.join(":");
-    offset += 16;
-  } else {
-    throw new Error(`Unsupported Trojan address type: ${addrType}`);
-  }
-  const port = new DataView(socksData.slice(offset, offset + 2)).getUint16(0);
-  const rawData = socksData.slice(offset + 4);
-  return { port, address, rawData };
-}
-
-async function establishRemoteSocket(address, port, rawPayload, ws, responseHeader, proxyList, userUuid = null) {
-  let socket = null;
-  let hasWritten = false;
-  async function tryConnect(targetHost, targetPort) {
-    const sock = connect({ hostname: targetHost, port: targetPort });
-    const writer = sock.writable.getWriter();
-    await writer.write(rawPayload);
-    writer.releaseLock();
+async function establishRemoteSocket(address, port, rawPayload, ws, initialResponseHeader, proxyList, userUuid) {
+  async function connectTarget(host, targetPort) {
+    const sock = connect({ hostname: host, port: targetPort });
+    if (rawPayload && rawPayload.byteLength > 0) {
+      const writer = sock.writable.getWriter();
+      await writer.write(rawPayload);
+      writer.releaseLock();
+    }
     return sock;
   }
+
+  let socket = null;
   try {
-    socket = await tryConnect(address, port);
-  } catch {
+    socket = await connectTarget(address, port);
+  } catch (err) {
     if (proxyList && proxyList.length > 0) {
       const fallbackHost = proxyList[Math.floor(Math.random() * proxyList.length)];
       try {
-        socket = await tryConnect(fallbackHost, port);
-      } catch (err) {
-        ws.close(1011, "Remote fallback failed");
-        return;
+        socket = await connectTarget(fallbackHost, port);
+      } catch (fErr) {
+        try { ws.close(1011, "Remote fallback unreachable"); } catch {}
+        return null;
       }
     } else {
-      ws.close(1011, "Remote connection failed");
-      return;
+      try { ws.close(1011, "Remote target unreachable"); } catch {}
+      return null;
     }
   }
+
+  let sentRespHeader = !initialResponseHeader;
   const wsWriter = new WritableStream({
     async write(chunk) {
-      hasWritten = true;
       if (ws.readyState !== 1) return;
       const sz = chunk.byteLength || chunk.length || 0;
       if (userUuid && sz > 0) {
@@ -199,9 +179,13 @@ async function establishRemoteSocket(address, port, rawPayload, ws, responseHead
         uStat.down += sz;
         pendingUserTraffic.set(userUuid, uStat);
       }
-      if (responseHeader) {
-        ws.send(await new Blob([responseHeader, chunk]).arrayBuffer());
-        responseHeader = null;
+
+      if (!sentRespHeader && initialResponseHeader) {
+        const combined = new Uint8Array(initialResponseHeader.byteLength + (chunk.byteLength || chunk.length || 0));
+        combined.set(new Uint8Array(initialResponseHeader), 0);
+        combined.set(new Uint8Array(chunk), initialResponseHeader.byteLength);
+        ws.send(combined.buffer);
+        sentRespHeader = true;
       } else {
         ws.send(chunk);
       }
@@ -213,10 +197,12 @@ async function establishRemoteSocket(address, port, rawPayload, ws, responseHead
       try { socket.close(); } catch {}
     }
   });
+
   socket.readable.pipeTo(wsWriter).catch(() => {
     try { socket.close(); } catch {}
     try { ws.close(); } catch {}
   });
+
   return socket;
 }
 
@@ -224,20 +210,23 @@ function handleVlessWS(request, env) {
   const pair = new WebSocketPair();
   const [clientWs, serverWs] = Object.values(pair);
   serverWs.accept();
-  const earlyDataBuffer = parseEarlyData(request.headers.get("sec-websocket-protocol"));
+
+  const earlyData = parseEarlyData(request.headers.get("sec-websocket-protocol"));
   let remoteSocket = null;
+  let currentUserUuid = null;
+
   const clientStream = new ReadableStream({
     start(controller) {
-      serverWs.addEventListener("message", (e) => controller.enqueue(e.data));
+      serverWs.addEventListener("message", e => controller.enqueue(e.data));
       serverWs.addEventListener("close", () => {
         if (remoteSocket) try { remoteSocket.close(); } catch {}
         controller.close();
       });
-      serverWs.addEventListener("error", (err) => controller.error(err));
-      if (earlyDataBuffer) controller.enqueue(earlyDataBuffer);
+      serverWs.addEventListener("error", err => controller.error(err));
+      if (earlyData) controller.enqueue(earlyData);
     }
   });
-  let currentUserUuid = null;
+
   const pipeSink = new WritableStream({
     async write(chunk) {
       if (remoteSocket) {
@@ -252,21 +241,24 @@ function handleVlessWS(request, env) {
         writer.releaseLock();
         return;
       }
+
       const header = parseVlessHeader(chunk);
-      serverWs.send(new Uint8Array([header.version[0], 0]));
-      const respHeader = null;
       currentUserUuid = header.uuid;
+
       if (header.rawData && header.rawData.byteLength > 0 && currentUserUuid) {
         const uStat = pendingUserTraffic.get(currentUserUuid) || { up: 0, down: 0 };
         uStat.up += header.rawData.byteLength;
         pendingUserTraffic.set(currentUserUuid, uStat);
       }
+
+      const vlessResponseHeader = new Uint8Array([header.version[0], 0]);
+
       remoteSocket = await establishRemoteSocket(
         header.address,
         header.port,
         header.rawData,
         serverWs,
-        respHeader,
+        vlessResponseHeader,
         DEFAULT_PROXY_IPS,
         currentUserUuid
       );
@@ -275,69 +267,12 @@ function handleVlessWS(request, env) {
       if (remoteSocket) try { remoteSocket.close(); } catch {}
     }
   });
+
   clientStream.pipeTo(pipeSink).catch(() => {
     if (remoteSocket) try { remoteSocket.close(); } catch {}
     try { serverWs.close(); } catch {}
   });
 
-  const respHeaders = new Headers();
-  const secProto = request.headers.get("sec-websocket-protocol");
-  if (secProto) respHeaders.set("Sec-WebSocket-Protocol", secProto);
-
-  return new Response(null, { status: 101, webSocket: clientWs, headers: respHeaders });
-}
-
-function handleTrojanWS(request, env) {
-  const pair = new WebSocketPair();
-  const [clientWs, serverWs] = Object.values(pair);
-  serverWs.accept();
-  const trPass = env.TROJAN_PASS || "mehr-secret-pass";
-  const earlyDataBuffer = parseEarlyData(request.headers.get("sec-websocket-protocol"));
-  let remoteSocket = null;
-  const clientStream = new ReadableStream({
-    start(controller) {
-      serverWs.addEventListener("message", (e) => controller.enqueue(e.data));
-      serverWs.addEventListener("close", () => {
-        if (remoteSocket) try { remoteSocket.close(); } catch {}
-        controller.close();
-      });
-      serverWs.addEventListener("error", (err) => controller.error(err));
-      if (earlyDataBuffer) controller.enqueue(earlyDataBuffer);
-    }
-  });
-  let currentUserUuid = null;
-  const pipeSink = new WritableStream({
-    async write(chunk) {
-      if (remoteSocket) {
-        const sz = chunk.byteLength || chunk.length || 0;
-        if (currentUserUuid && sz > 0) {
-          const uStat = pendingUserTraffic.get(currentUserUuid) || { up: 0, down: 0 };
-          uStat.up += sz;
-          pendingUserTraffic.set(currentUserUuid, uStat);
-        }
-        const writer = remoteSocket.writable.getWriter();
-        await writer.write(chunk);
-        writer.releaseLock();
-        return;
-      }
-      const header = await parseTrojanHeader(chunk, trPass);
-      remoteSocket = await establishRemoteSocket(
-        header.address,
-        header.port,
-        header.rawData,
-        serverWs,
-        null,
-        DEFAULT_PROXY_IPS
-      );
-    },
-    close() {
-      if (remoteSocket) try { remoteSocket.close(); } catch {}
-    }
-  });
-  clientStream.pipeTo(pipeSink).catch(() => {
-    if (remoteSocket) try { remoteSocket.close(); } catch {}
-    try { serverWs.close(); } catch {}
-  });
   return new Response(null, { status: 101, webSocket: clientWs });
 }
 
@@ -364,23 +299,25 @@ async function serveMaintenancePage(request, url) {
     }
     return await fetch(new Request(targetUrl.toString(), fetchInit));
   } catch (e) {
-    const pair = new WebSocketPair();
-    pair[1].accept();
-    return new Response(null, { status: 101, webSocket: pair[0] });
+    return new Response("Service Unavailable", { status: 503 });
   }
 }
 
 export default {
   async fetch(request, env, ctx) {
+    totalWorkerRequests++;
     pendingRequestsCount++;
     ctx.waitUntil(syncWithMaster(env, request));
-    const url = new URL(request.url);
-    const path = url.pathname;
 
-    if (request.headers.get("Upgrade") === "websocket" || request.headers.get("upgrade") === "websocket") {
-      if (path.startsWith("/vl") || path === "/vl") return handleVlessWS(request, env);
-      if (path.startsWith("/tr") || path === "/tr") return handleTrojanWS(request, env);
-      return new Response("Not Found", { status: 404 });
+    const url = new URL(request.url);
+    const path = url.pathname.toLowerCase();
+    const upgradeHeader = (request.headers.get("Upgrade") || "").toLowerCase();
+
+    if (upgradeHeader === "websocket") {
+      if (path === "/" || path.startsWith("/vl") || path.includes("vless")) {
+        return handleVlessWS(request, env);
+      }
+      return new Response("WebSocket Protocol Mismatch", { status: 400 });
     }
 
     const corsHeaders = {
@@ -405,10 +342,11 @@ export default {
       return new Response(JSON.stringify({
         status: "active",
         role: "edge_node",
-        version: "1.0.0",
-        protocols: ["vless", "trojan"],
-        earlyData: "2560",
-        stats: {}
+        version: "2.1.0",
+        node_id: env.NODE_ID || "unknown",
+        country: detectedCountry || request.cf?.country || "XX",
+        total_requests: totalWorkerRequests,
+        pending_traffic_users: pendingUserTraffic.size
       }), {
         status: 200,
         headers: { "Content-Type": "application/json", ...corsHeaders }

@@ -588,7 +588,7 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
                     });
                 }
 
-                let nodeTargets = [];
+                var nodeTargets = [];
                 if (allowedNodes.size > 0) {
                 for (const node of nodesList) {
                     let pureH = getPureHost(node.url || node.host || "");

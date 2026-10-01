@@ -56,7 +56,7 @@ async function handleGetAccount(request) {
 
 async function handleDeploy(request) {
     try {
-        const { apiToken, accountId, targetType, workerName } = await request.json();
+        const { apiToken, accountId, targetType, workerName, masterPanelUrl, clusterKey, customRepo } = await request.json();
         if (!apiToken || !accountId || !workerName || !targetType) {
             return jsonRes(false, "تمام فیلدها الزامی هستند.");
         }
@@ -64,7 +64,7 @@ async function handleDeploy(request) {
         const cleanName = workerName.toLowerCase().trim().replace(/[^a-z0-9-_]/g, "");
 
         if (targetType === "edge") {
-            return await deployEdgeNode(apiToken, accountId, cleanName);
+            return await deployEdgeNode(apiToken, accountId, cleanName, masterPanelUrl, clusterKey, customRepo);
         } else if (targetType === "master") {
             return await deployMasterPanel(apiToken, accountId, cleanName);
         } else {
@@ -78,9 +78,11 @@ async function handleDeploy(request) {
 // -----------------------------------------------------------------------------
 // 1. نصب و استقرار نود فرعی (Edge Ghost Node)
 // -----------------------------------------------------------------------------
-async function deployEdgeNode(token, accountId, nodeName) {
+async function deployEdgeNode(token, accountId, nodeName, masterPanelUrl, clusterKey, customRepo) {
+    const targetMasterUrl = (masterPanelUrl && masterPanelUrl.trim()) ? masterPanelUrl.trim().replace(/\/+$/, "") : "https://mehr.v5twycq1o.workers.dev";
+    const targetClusterKey = (clusterKey && clusterKey.trim()) ? clusterKey.trim() : "mehr_cluster_secret_2026";
     const nodeApiKey = "mehr_sec_" + crypto.randomUUID().replace(/-/g, "") + "_" + Math.random().toString(36).substring(2, 10);
-    const agentSource = await fetchFromGithub("mehr-agent.js");
+    const agentSource = await fetchFromGithub("mehr-agent.js", customRepo);
 
     const form = new FormData();
     const metadata = {
@@ -88,7 +90,10 @@ async function deployEdgeNode(token, accountId, nodeName) {
         compatibility_date: new Date().toISOString().split("T")[0],
         compatibility_flags: ["nodejs_compat"],
         bindings: [
-            { type: "plain_text", name: "API_KEY", text: nodeApiKey }
+            { type: "plain_text", name: "API_KEY", text: nodeApiKey },
+            { type: "plain_text", name: "NODE_ID", text: nodeName },
+            { type: "plain_text", name: "PANEL_URL", text: targetMasterUrl },
+            { type: "plain_text", name: "CLUSTER_KEY", text: targetClusterKey }
         ]
     };
 
@@ -240,12 +245,15 @@ async function getOrCreateKV(accountId, token, kvTitle) {
 const CORE_REPO = "Reeeza2005/mehr-panel";
 const CORE_BRANCH = "main";
 
-async function fetchFromGithub(filePath) {
-    const rawUrl = `https://raw.githubusercontent.com/${CORE_REPO}/${CORE_BRANCH}/${filePath}?_t=${Date.now()}`;
+async function fetchFromGithub(filePath, customRepo) {
+    const repo = (customRepo && customRepo.trim()) ? customRepo.trim() : CORE_REPO;
+    const rawUrl = `https://raw.githubusercontent.com/${repo}/${CORE_BRANCH}/${filePath}?_t=${Date.now()}`;
     const res = await fetch(rawUrl, {
         headers: {
             "User-Agent": "Mehr-Wizard-Installer",
-            "Accept": "text/plain"
+            "Accept": "text/plain",
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache"
         }
     });
     if (!res.ok) {
@@ -464,10 +472,22 @@ function getWizardHtml() {
 
         <div class="field">
             <label>عملیات مورد نظر</label>
-            <select id="targetType" onchange="updateWorkerDropdown()" onchange="updateTargetUI()">
+            <select id="targetType" onchange="onTargetTypeChange()">
                 <option value="master">🚀 نصب / به‌روزرسانی پنل اصلی (Master Panel)</option>
                 <option value="edge">👻 راه‌اندازی نود فرعی جدید (Ghost Edge Node)</option>
             </select>
+        </div>
+
+        <div id="edgeFieldsGroup" style="display: none; background: rgba(255,255,255,0.03); border: 1px dashed rgba(255,255,255,0.15); border-radius: 8px; padding: 12px; margin-bottom: 15px;">
+            <div class="field" style="margin-bottom: 10px;">
+                <label style="font-size: 13px;">آدرس پنل اصلی (Master Panel URL)</label>
+                <input type="text" id="masterPanelUrl" placeholder="https://mehr.your-subdomain.workers.dev" />
+                <small style="color: #aaa; font-size: 11px;">آدرس ورکر پنل اصلی که ترافیک و کاربران با آن سینک می‌شوند</small>
+            </div>
+            <div class="field" style="margin-bottom: 0;">
+                <label style="font-size: 13px;">کلید همگام‌‌سازی کلاستر (Cluster Secret Key)</label>
+                <input type="text" id="clusterKey" value="mehr_cluster_secret_2026" />
+            </div>
         </div>
 
         <div class="field">
@@ -547,6 +567,25 @@ function getWizardHtml() {
                 input.focus();
             } else if (val) {
                 input.value = val;
+            }
+        }
+
+        function onTargetTypeChange() {
+            updateWorkerDropdown();
+            updateTargetUI();
+            const type = document.getElementById("targetType").value;
+            const edgeFields = document.getElementById("edgeFieldsGroup");
+            if (edgeFields) {
+                edgeFields.style.display = (type === "edge") ? "block" : "none";
+                if (type === "edge" && !document.getElementById("masterPanelUrl").value) {
+                    const masterCandidate = cachedWorkers.find(w => w.id.toLowerCase().includes("panel") || w.id.toLowerCase() === "mehr");
+                    if (masterCandidate) {
+                        const accName = document.getElementById("accountBadge") ? document.getElementById("accountBadge").innerText : "";
+                        if (accName) {
+                            document.getElementById("masterPanelUrl").placeholder = "https://" + masterCandidate.id + ".workers.dev";
+                        }
+                    }
+                }
             }
         }
 
@@ -632,7 +671,14 @@ function getWizardHtml() {
                 const res = await fetch("/api/deploy", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ apiToken, accountId: detectedAccountId, targetType, workerName })
+                    body: JSON.stringify({
+                        apiToken,
+                        accountId: detectedAccountId,
+                        targetType,
+                        workerName,
+                        masterPanelUrl: document.getElementById("masterPanelUrl") ? document.getElementById("masterPanelUrl").value.trim() : "",
+                        clusterKey: document.getElementById("clusterKey") ? document.getElementById("clusterKey").value.trim() : ""
+                    })
                 });
                 const data = await res.json();
 

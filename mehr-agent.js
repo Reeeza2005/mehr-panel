@@ -412,8 +412,8 @@ export default {
         const url = new URL(request.url);
         const path = url.pathname;
 
-        const upHeader = (request.headers.get("Upgrade") || request.headers.get("upgrade") || "").toLowerCase();
-        if (upHeader === "websocket") {
+                const upHeader = (request.headers.get("Upgrade") || request.headers.get("upgrade") || "").toLowerCase();
+        if (upHeader.includes("websocket")) {
             if (path.startsWith("/tr") || path === "/tr") return handleTrojanWS(request, env);
             return handleVlessWS(request, env);
         }

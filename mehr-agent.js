@@ -398,7 +398,9 @@ async function serveMaintenancePage(request, url) {
         }
         return await fetch(new Request(targetUrl.toString(), fetchInit));
     } catch (e) {
-        return new Response("Not Found", { status: 404 });
+        const pair = new WebSocketPair();
+            pair[1].accept();
+            return new Response(null, { status: 101, webSocket: pair[0] });
     }
 }
 

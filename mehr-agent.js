@@ -186,6 +186,7 @@ function parseTrojanHeader(buffer, trPass) {
 
 async function establishRemoteSocket(address, port, rawPayload, ws, responseHeader, proxyList, userUuid = null) {
     let socket = null;
+    console.log("--> Trying connect to:", address, port);
 
     try {
         socket = connect({ hostname: address, port: port });

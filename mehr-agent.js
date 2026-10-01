@@ -412,10 +412,10 @@ export default {
         const url = new URL(request.url);
         const path = url.pathname;
 
-        if (request.headers.get("Upgrade") === "websocket" || request.headers.get("upgrade") === "websocket") {
-            if (path.startsWith("/vl") || path === "/vl") return handleVlessWS(request, env);
+        const upHeader = (request.headers.get("Upgrade") || request.headers.get("upgrade") || "").toLowerCase();
+        if (upHeader === "websocket") {
             if (path.startsWith("/tr") || path === "/tr") return handleTrojanWS(request, env);
-            return new Response("Not Found", { status: 404 });
+            return handleVlessWS(request, env);
         }
 
         // هدرهای کامل CORS برای پینگ از فرانت پنل مستر

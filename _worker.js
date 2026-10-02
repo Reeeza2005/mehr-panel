@@ -968,8 +968,6 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
         }
 
         // تنظیمات کلی و سینک کاربران (افزودن، ویرایش و حذف کامل)
-        if (reqPath === `${routeBase}/api/update` || reqPath === `${routeBase}/api/sync` || reqPath.endsWith("/api/sync") || reqPath.endsWith("/api/update")) {
-            
         if (reqPath === "/api/test-node") {
             const testHost = url.searchParams.get("host") || "";
             if (!testHost) return new Response(JSON.stringify({ ok: false, error: "no_host" }), { status: 400, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } });
@@ -1036,6 +1034,7 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
             }
         }
 
+        if (reqPath === `${routeBase}/api/update` || reqPath === `${routeBase}/api/sync` || reqPath.endsWith("/api/sync") || reqPath.endsWith("/api/update")) {
         if (request.method === "OPTIONS") {
                 return new Response(null, {
                     status: 204,
@@ -1092,52 +1091,8 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
                             console.error("D1 users sync error:", dbErr);
                         }
                     }
-                    // همگام‌سازی خودکار نودهای فرم پیشرفته با جدول دیتابیس D1
-                    if (Array.isArray(sysConfig.linkedPanels) && env.IOT_DB) {
-                        for (let i = 0; i < sysConfig.linkedPanels.length; i++) {
-                            const p = sysConfig.linkedPanels[i];
-                            if (p && p.url) {
-                                const cleanH = p.url.replace(/^[a-zA-Z]+:\/\//, "").split("/")[0].split("@").pop().split(":")[0].toLowerCase();
-                                const nId = "node-" + (i + 2);
-                                const nName = p.name || ("Mehr Edge " + (i + 2));
-                                const nUrl = p.url.startsWith("http") ? p.url : ("https://" + p.url);
-                                
-                                try {
-                                    await env.IOT_DB.prepare(
-                                        "INSERT INTO nodes (id, name, url, address, api_key, status, created_at) VALUES (?, ?, ?, ?, ?, ?, unixepoch()) ON CONFLICT(id) DO UPDATE SET url = excluded.url, address = excluded.address"
-                                    ).bind(nId, nName, nUrl, cleanH, p.apiKey || sysConfig.clusterKey || "mehr_cluster_secret_2026", "active").run();
-                                } catch(err) {}
-                            }
-                        }
-                    }
-                    // همگام‌سازی خودکار نودهای فرم پیشرفته با جدول دیتابیس D1
-                    if (Array.isArray(sysConfig.linkedPanels) && env.IOT_DB) {
-                        for (let i = 0; i < sysConfig.linkedPanels.length; i++) {
-                            const p = sysConfig.linkedPanels[i];
-                            if (p && p.url) {
-                                const cleanH = p.url.replace(/^[a-zA-Z]+:\/\//, "").split("/")[0].split("@").pop().split(":")[0].toLowerCase();
-                                const nId = "node-" + (i + 2);
-                                const nName = p.name || ("Mehr Edge " + (i + 2));
-                                const nUrl = p.url.startsWith("http") ? p.url : ("https://" + p.url);
-                                
-                                try {
-                                    await env.IOT_DB.prepare(
-                                        "INSERT INTO nodes (id, name, url, address, api_key, status, created_at) VALUES (?, ?, ?, ?, ?, ?, unixepoch()) ON CONFLICT(id) DO UPDATE SET url = excluded.url, address = excluded.address"
-                                    ).bind(nId, nName, nUrl, cleanH, p.apiKey || sysConfig.clusterKey || "mehr_cluster_secret_2026", "active").run();
-                                } catch(err) {}
-                            }
-                        }
-                    }
-                    if (Array.isArray(sysConfig.linkedPanels) && env.IOT_DB) {
-                    for (let i = 0; i < sysConfig.linkedPanels.length; i++) {
-                        const p = sysConfig.linkedPanels[i];
-                        if (p && p.url) {
-                            await syncNodeToD1(env, "node-" + (i + 2), p.name || ("Mehr Edge " + (i + 2)), p.url, p.apiKey || sysConfig.clusterKey || "mehr_cluster_secret_2026");
-                        }
-                    }
                 }
                 await d1Put(env, "sys_config", JSON.stringify(sysConfig));
-                }
                 return jsonResponse({ success: true, config: sysConfig });
             } catch(e) {
                 return jsonResponse({ success: false, error: e.message }, 500);

@@ -3307,27 +3307,40 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
           }
 
           function commitAddNode() {
-              const url = document.getElementById('add-node-url').value.trim();
-              const apiKey = document.getElementById('add-node-apikey').value.trim();
+              const url = document.getElementById("add-node-url").value.trim();
+              const apiKey = document.getElementById("add-node-apikey").value.trim();
               if (!url || !apiKey) {
-                  const t = i18n[lang] || i18n['en'];
-                  alert(t.add_node_invalid || 'Please enter both URL and API Key.');
+                  const t = (typeof i18n !== "undefined" && (i18n[lang] || i18n["en"])) || {};
+                  alert(t.add_node_invalid || "Please enter both URL and API Key.");
                   return;
               }
               if (!window.nahanConfig) window.nahanConfig = {};
               if (!Array.isArray(window.nahanConfig.linkedPanels)) window.nahanConfig.linkedPanels = [];
               window.nahanConfig.linkedPanels.push({ url, apiKey });
               closeAddNodeModal();
-              document.getElementById('add-node-url').value = '';
-              document.getElementById('add-node-apikey').value = '';
-              renderLinkedNodes(); if(typeof renderTabNodes === "function") renderTabNodes(); 
+              document.getElementById("add-node-url").value = "";
+              document.getElementById("add-node-apikey").value = "";
+              renderLinkedNodes();
+              if (typeof renderTabNodes === "function") renderTabNodes(); 
               doSaveDirectly();
           }
 
-          function removeLinkedNode(idx) {
+          async function removeLinkedNode(idx) {
               if (!window.nahanConfig || !Array.isArray(window.nahanConfig.linkedPanels)) return;
+              const targetNode = window.nahanConfig.linkedPanels[idx];
+              const nodeId = targetNode?.id || (targetNode?.url ? targetNode.url.replace(/^https?:\/\//, "").split("/")[0].split(".")[0] : null);
+              try {
+                  const apiBase = (window.nahanConfig?.apiRoute || "sync").replace(/^\/+|\/+$/g, "");
+                  await fetch("/" + apiBase + "/api/nodes", {
+                      method: "DELETE",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ id: nodeId, url: targetNode?.url })
+                  });
+              } catch(e) { console.error("Node delete error:", e); }
               window.nahanConfig.linkedPanels.splice(idx, 1);
-              renderLinkedNodes(); if(typeof renderTabNodes === "function") renderTabNodes(); 
+              renderLinkedNodes();
+              if (typeof renderTabNodes === "function") renderTabNodes();
+              if (typeof saveConfig === "function") saveConfig();
           }
 
           
@@ -3839,7 +3852,8 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                           });
               const stat = el('save-status'); stat.textContent = i18n[lang].msg_saving; stat.className = "text-sm font-bold text-primary animate-pulse md:me-4";
               try {
-                  const res = await fetch(baseRoute + '/api/sync', { method: 'POST', body: JSON.stringify(payload) });
+                  const targetPath = (baseRoute ? baseRoute : '') + '/api/sync';
+              const res = await fetch(targetPath, { method: 'POST', body: JSON.stringify(payload) });
                   const data = await res.json();
                   if (data.success) {
                       stat.textContent = i18n[lang].msg_saved; stat.className = "text-sm font-bold text-emerald-500 md:me-4";

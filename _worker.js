@@ -1245,9 +1245,10 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
             if (request.method === "GET") {
                 const { results } = await env.IOT_DB.prepare(`
                     SELECT n.*, 
-                           COALESCE(SUM(nt.bytes_uploaded + nt.bytes_downloaded), 0) AS total_bytes
+                           COALESCE(SUM(nt.bytes_uploaded + nt.bytes_downloaded), 0) AS total_bytes,
+                           COALESCE(SUM(CASE WHEN nt.last_update >= unixepoch('start of day') THEN (nt.bytes_uploaded + nt.bytes_downloaded) ELSE 0 END), 0) AS today_bytes
                     FROM nodes n
-                    LEFT JOIN node_traffic nt ON (nt.node_id = n.id OR nt.node_id LIKE '%' || n.id || '%')
+                    LEFT JOIN node_traffic nt ON (nt.node_id = n.id OR nt.node_id LIKE '%' || n.id || '%' OR n.url LIKE '%' || nt.node_id || '%')
                     GROUP BY n.id
                     ORDER BY n.created_at DESC
                 `).all();
@@ -1260,10 +1261,6 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
 
                 const computedNodes = (results || []).map(n => {
                     let dReqs = Number(n.daily_requests || 0);
-                    // فقط اگر نود آمار ثبت شده نداشت، از آمار مستر استفاده کن
-                    if (dReqs === 0 && cfStats && cfStats.totalRequests !== undefined) {
-                        dReqs = cfStats.totalRequests;
-                    }
                     return {
                         ...n,
                         daily_requests: dReqs,
@@ -1414,7 +1411,7 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
                 const nodeName = b.node_name || b.name || nodeId;
                 const nodeUrl = b.node_url || b.address || "";
                 const nodeCountry = b.country || "";
-                const reqDelta = parseInt(b.requests_delta || b.requests || 0) || 0;
+                const reqDelta = parseInt(b.daily_requests ?? b.requests ?? b.requests_count ?? b.requests_delta ?? 0) || 0;
 
                 await env.IOT_DB.prepare(`
                     INSERT INTO nodes (id, name, url, api_key, created_at, status, country, daily_requests, last_reset_date, last_seen)
@@ -1423,7 +1420,7 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
                         last_seen = excluded.last_seen,
                         status = "active",
                         country = CASE WHEN excluded.country != "" THEN excluded.country ELSE nodes.country END,
-                        daily_requests = CASE WHEN excluded.daily_requests > 0 THEN excluded.daily_requests ELSE nodes.daily_requests END,
+                        daily_requests = excluded.daily_requests,
                         last_reset_date = excluded.last_reset_date
                 `).bind(nodeId, nodeName, nodeUrl, nodeKey, now, nodeCountry, reqDelta, todayStr, now).run();
 

@@ -5536,7 +5536,7 @@ function buildModeCheckboxes(wrapId, userMode) {
                         window.clusterNodeStats.nodes[h] = {
                             ...(window.clusterNodeStats.nodes[h] || {}),
                             total_bytes: Number(n.total_bytes || 0),
-                            today_bytes: Number(n.total_bytes || 0),
+                            today_bytes: Number(n.today_bytes || 0),
                             daily_requests: Number(n.daily_requests || 0),
                             country: n.country || "US",
                             flag: n.flag || "",
@@ -5623,7 +5623,7 @@ function buildModeCheckboxes(wrapId, userMode) {
             const latency = st.latency ? (st.latency + (typeof st.latency === 'number' ? " ms" : "")) : "--";
             const country = st.country || stats[lowHost]?.country || "";
             const flagEmoji = st.flag || getCountryFlagEmoji(country);
-            const dailyReqs = st.daily_requests ?? stats[lowHost]?.daily_requests ?? (window.clusterNodeStats?.nodes?.[lowHost]?.daily_requests) ?? (window.clusterNodeStats?.masterDailyReqs) ?? 0;
+            const dailyReqs = Number(st.daily_requests ?? stats[lowHost]?.daily_requests ?? window.clusterNodeStats?.nodes?.[lowHost]?.daily_requests ?? 0);
 
             let nodeUsers = 0, nodeTotalBytes = 0, nodeTodayBytes = 0;
 			users.forEach(u => {

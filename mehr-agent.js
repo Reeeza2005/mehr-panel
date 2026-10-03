@@ -66,7 +66,16 @@ async function syncWithMaster(env, request, force = false) {
     const nodeKey = env.API_KEY || env.CLUSTER_KEY || env.NODE_KEY;
     if (!panelUrl || !nodeKey) return;
 
+    let cfDaily = null;
+    try {
+      if (typeof getEdgeNodeCFUsage === "function") {
+        cfDaily = await getEdgeNodeCFUsage(env);
+      }
+    } catch(e) {}
+
     const reqsToSend = pendingRequestsCount > 0 ? pendingRequestsCount : (totalPendingBytes > 0 ? 1 : 0);
+    const finalRequests = (cfDaily !== null && cfDaily >= 0) ? cfDaily : reqsToSend;
+
     const trafficSnapshot = [];
     for (const [uuid, tr] of pendingUserTraffic.entries()) {
       if (tr.up > 0 || tr.down > 0) {
@@ -74,17 +83,10 @@ async function syncWithMaster(env, request, force = false) {
       }
     }
 
-    if (trafficSnapshot.length === 0 && reqsToSend === 0 && !force) {
+    // اگر نه ترافیکی بود، نه استعلام کلادفلر و نه فورس، ریترن کن
+    if (trafficSnapshot.length === 0 && finalRequests === 0 && !force) {
       return;
     }
-
-    let cfDaily = null;
-    try {
-      if (typeof getEdgeNodeCFUsage === "function") {
-        cfDaily = await getEdgeNodeCFUsage(env);
-      }
-    } catch(e) {}
-    const finalRequests = (cfDaily !== null && cfDaily > 0) ? cfDaily : reqsToSend;
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 3000);
@@ -100,12 +102,13 @@ async function syncWithMaster(env, request, force = false) {
       
 
       body: JSON.stringify({
-        node_id: env.NODE_ID || "nod-4",
+        node_id: env.NODE_ID || (new URL(request?.url || "https://node.internal").hostname.split(".")[0]),
         timestamp: now,
-        requests_count: finalRequests,
-        requests_delta: effectiveReqs,
         requests: finalRequests,
-        country: detectedCountry || "XX",
+        requests_count: finalRequests,
+        requests_delta: finalRequests,
+        daily_requests: finalRequests,
+        country: detectedCountry || "US",
         user_traffic: trafficSnapshot
       }),
       signal: controller.signal

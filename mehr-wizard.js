@@ -1,6 +1,6 @@
-const WIZARD_VERSION = "2.0.3";
+const WIZARD_VERSION = "2.1.0";
 // =============================================================================
-// Mehr Unified Deployment Wizard (Standard Multi-Tenant Edition)
+// Mehr Unified Deployment Wizard (Multi-Account & Auto-Stats Edition)
 // =============================================================================
 
 const CORE_REPO = "Reeeza2005/mehr-panel";
@@ -43,7 +43,6 @@ async function handleGetAccount(request) {
         const accountId = data.result[0].id;
         const accountName = data.result[0].name;
 
-        // دریافت لیست ورکرها
         let workersList = [];
         try {
             const wRes = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/scripts`, {
@@ -70,7 +69,7 @@ async function handleGetAccount(request) {
 // -----------------------------------------------------------------------------
 async function handleDeploy(request) {
     try {
-        const { apiToken, accountId, targetType, workerName } = await request.json();
+        const { apiToken, accountId, targetType, workerName, masterPanelUrl } = await request.json();
         if (!apiToken || !accountId || !workerName || !targetType) {
             return jsonRes(false, "تمامی فیلدها الزامی هستند.");
         }
@@ -80,7 +79,7 @@ async function handleDeploy(request) {
         if (targetType === "master") {
             return await deployMasterPanel(apiToken, accountId, cleanName);
         } else if (targetType === "edge") {
-            return await deployEdgeNode(apiToken, accountId, cleanName);
+            return await deployEdgeNode(apiToken, accountId, cleanName, masterPanelUrl || "");
         } else {
             return jsonRes(false, "نوع عملیات نامعتبر است.");
         }
@@ -95,7 +94,6 @@ async function handleDeploy(request) {
 async function deployMasterPanel(token, accountId, panelName) {
     const d1Id = await getOrCreateD1(accountId, token, "super_panel_db");
 
-    // پیکربندی جداول و مشخصات سیستم
     try {
         const initSql = `
             CREATE TABLE IF NOT EXISTS kv_store (key TEXT PRIMARY KEY, value TEXT);
@@ -140,7 +138,6 @@ async function deployMasterPanel(token, accountId, panelName) {
         });
     } catch (e) {}
 
-    // دریافت آخرین سورس از گیت‌هاب بدون کش
     const masterWorkerSource = await fetchFromGithub("_worker.js");
     const masterHtmlSource = await fetchFromGithub("dashboard.html");
 
@@ -185,41 +182,41 @@ async function deployMasterPanel(token, accountId, panelName) {
 // -----------------------------------------------------------------------------
 // ۲. استقرار نود لبه (Edge Ghost Node)
 // -----------------------------------------------------------------------------
-async function deployEdgeNode(token, accountId, nodeName) {
+async function deployEdgeNode(token, accountId, nodeName, customMasterUrl = "") {
     const nodeApiKey = "mehr_sec_" + crypto.randomUUID().replace(/-/g, "") + "_" + Math.random().toString(36).substring(2, 10);
     const agentSource = await fetchFromGithub("mehr-agent.js");
-    const d1Id = await getOrCreateD1(accountId, token, "super_panel_db");
 
-    // یافتن ساب‌دامین اختصاصی حساب
-    let subdomain = "";
-    try {
-        const subRes = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/subdomain`, {
-            headers: { Authorization: `Bearer ${token}` }
-        });
-        const subData = await subRes.json();
-        subdomain = subData?.result?.subdomain || "";
-    } catch (e) {}
-
-    let masterUrl = subdomain ? `https://mehr.${subdomain}.workers.dev` : "";
+    let masterUrl = customMasterUrl.trim().replace(/\/+$/, "");
     let clusterSecret = "mehr_cluster_secret_2026";
 
-    // بازیابی تنظیمات پنل از D1 برای اتصال دقیق
-    try {
-        const confRes = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/d1/database/${d1Id}/query`, {
-            method: "POST",
-            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-            body: JSON.stringify({ sql: "SELECT value FROM kv_store WHERE key = 'sys_config';" })
-        });
-        const confData = await confRes.json();
-        const confRaw = confData?.result?.[0]?.results?.[0]?.value;
-        if (confRaw) {
-            const parsed = JSON.parse(confRaw);
-            if (parsed.clusterKey) clusterSecret = parsed.clusterKey;
-            if (parsed.cfWorkerName && subdomain) {
-                masterUrl = `https://${parsed.cfWorkerName}.${subdomain}.workers.dev`;
+    if (!masterUrl) {
+        try {
+            const d1Id = await getOrCreateD1(accountId, token, "super_panel_db");
+            const confRes = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/d1/database/${d1Id}/query`, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                body: JSON.stringify({ sql: "SELECT value FROM kv_store WHERE key = 'sys_config';" })
+            });
+            const confData = await confRes.json();
+            const confRaw = confData?.result?.[0]?.results?.[0]?.value;
+            if (confRaw) {
+                const parsed = JSON.parse(confRaw);
+                if (parsed.clusterKey) clusterSecret = parsed.clusterKey;
+                const subRes = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/subdomain`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                const subData = await subRes.json();
+                const sub = subData?.result?.subdomain;
+                if (parsed.cfWorkerName && sub) {
+                    masterUrl = `https://${parsed.cfWorkerName}.${sub}.workers.dev`;
+                }
             }
-        }
-    } catch (e) {}
+        } catch (e) {}
+    }
+
+    if (!masterUrl) {
+        throw new Error("آدرس پنل مستر مشخص نیست. لطفاً آدرس پنل اصلی را در فرم وارد کنید.");
+    }
 
     const form = new FormData();
     const metadata = {
@@ -230,7 +227,9 @@ async function deployEdgeNode(token, accountId, nodeName) {
             { type: "plain_text", name: "PANEL_URL", text: masterUrl },
             { type: "plain_text", name: "CLUSTER_KEY", text: clusterSecret },
             { type: "plain_text", name: "API_KEY", text: nodeApiKey },
-            { type: "plain_text", name: "NODE_ID", text: nodeName }
+            { type: "plain_text", name: "NODE_ID", text: nodeName },
+            { type: "plain_text", name: "CF_ACCOUNT_ID", text: accountId },
+            { type: "plain_text", name: "CF_API_TOKEN", text: token }
         ]
     };
 
@@ -251,8 +250,8 @@ async function deployEdgeNode(token, accountId, nodeName) {
     await enableWorkerSubdomain(accountId, token, nodeName);
     const finalUrl = await getWorkerUrl(accountId, token, nodeName, false);
 
-    // ثبت خودکار نود در پایگاه داده مستر
     try {
+        const d1Id = await getOrCreateD1(accountId, token, "super_panel_db");
         const cleanHost = finalUrl.replace(/^https?:\/\//, "").split("/")[0];
         const insertSql = `INSERT OR REPLACE INTO nodes (id, name, url, address, api_key, status, created_at, last_seen) 
                            VALUES ('${nodeName}', '${nodeName}', '${finalUrl}', '${cleanHost}', '${nodeApiKey}', 'active', unixepoch(), unixepoch());`;
@@ -263,7 +262,7 @@ async function deployEdgeNode(token, accountId, nodeName) {
         });
     } catch (dbErr) {}
 
-    return jsonRes(true, "نود فرعی با موفقیت دیپلوی و در پنل ثبت شد.", {
+    return jsonRes(true, "نود فرعی با موفقیت دیپلوی و به پنل متصل شد.", {
         type: "edge",
         url: finalUrl,
         apiKey: nodeApiKey,
@@ -505,7 +504,7 @@ function getWizardHtml(version = WIZARD_VERSION) {
 
         <div class="field">
             <label>Cloudflare API Token</label>
-            <input type="password" id="apiToken" placeholder="توکن را پیست کنید" oninput="detectAccount()">
+            <input type="password" id="apiToken" placeholder="توکن اکانت مورد نظر را پیست کنید" oninput="detectAccount()">
             <div class="account-badge" id="accountBadge"></div>
         </div>
 
@@ -515,6 +514,12 @@ function getWizardHtml(version = WIZARD_VERSION) {
                 <option value="master">🚀 نصب / به‌‌روزرسانی پنل اصلی (Master Panel)</option>
                 <option value="edge">👻 راه‌اندازی نود فرعی جدید (Ghost Edge Node)</option>
             </select>
+        </div>
+
+        <div class="field" id="masterUrlField" style="display:none;">
+            <label>🌐 آدرس پنل اصلی مِهر (Master URL)</label>
+            <input type="text" id="masterPanelUrl" placeholder="https://mehr.your-domain.workers.dev">
+            <span style="font-size: 11px; color: var(--text-muted); display: block; margin-top: 4px;">آدرس کامل پنل مستر که این نود فرعی باید به آن متصل شود.</span>
         </div>
 
         <div class="field">
@@ -597,12 +602,16 @@ function getWizardHtml(version = WIZARD_VERSION) {
             const type = document.getElementById("targetType").value;
             const nameInput = document.getElementById("workerName");
             const label = document.getElementById("nameLabel");
+            const masterUrlField = document.getElementById("masterUrlField");
+
             if (type === "master") {
                 label.innerText = "نام ورکر پنل اصلی";
                 nameInput.value = "mehr";
+                masterUrlField.style.display = "none";
             } else {
                 label.innerText = "نام ورکر نود فرعی";
                 nameInput.value = "node-edge-1";
+                masterUrlField.style.display = "block";
             }
         }
 
@@ -645,6 +654,7 @@ function getWizardHtml(version = WIZARD_VERSION) {
             const apiToken = document.getElementById("apiToken").value.trim();
             const targetType = document.getElementById("targetType").value;
             const workerName = document.getElementById("workerName").value.trim();
+            const masterPanelUrl = document.getElementById("masterPanelUrl").value.trim();
             const btn = document.getElementById("deployBtn");
             const status = document.getElementById("statusMsg");
             const resultBox = document.getElementById("resultBox");
@@ -652,6 +662,12 @@ function getWizardHtml(version = WIZARD_VERSION) {
             if (!apiToken || !workerName) {
                 status.className = "status error";
                 status.innerText = "لطفاً توکن و نام ورکر را وارد کنید.";
+                return;
+            }
+
+            if (targetType === "edge" && !masterPanelUrl) {
+                status.className = "status error";
+                status.innerText = "لطفاً آدرس پنل اصلی مِهر را وارد کنید.";
                 return;
             }
 
@@ -674,7 +690,13 @@ function getWizardHtml(version = WIZARD_VERSION) {
                 const res = await fetch("/api/deploy", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ apiToken, accountId: detectedAccountId, targetType, workerName })
+                    body: JSON.stringify({ 
+                        apiToken, 
+                        accountId: detectedAccountId, 
+                        targetType, 
+                        workerName,
+                        masterPanelUrl 
+                    })
                 });
                 const data = await res.json();
 
@@ -688,7 +710,7 @@ function getWizardHtml(version = WIZARD_VERSION) {
                     if (data.data.type === "edge") {
                         keyBox.style.display = "block";
                         document.getElementById("resKey").innerText = data.data.apiKey;
-                        resultDesc.innerText = "✅ نود فرعی آماده شد و کلید کنترل آن جهت مدیریت ثبت گردید.";
+                        resultDesc.innerText = "✅ نود فرعی با موفقیت مستقر شد و آمار اکانت آن خودکار به پنل مستر گزارش می‌شود.";
                     } else {
                         keyBox.style.display = "none";
                         resultDesc.innerText = "✅ پنل اصلی مهر با موفقیت آماده شد. با کلیک بر روی لینک بالا وارد پنل شوید.";

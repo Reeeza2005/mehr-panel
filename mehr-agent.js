@@ -417,7 +417,7 @@ export default {
       return new Response(JSON.stringify({
         status: "active",
         role: "edge_node",
-        node_id: env.NODE_ID || "nod-4"
+        node_id: env.NODE_ID || url.hostname.split(".")[0] || "edge-node"
       }), {
         status: 200,
         headers: { "Content-Type": "application/json" }
@@ -450,5 +450,12 @@ export default {
   }
 
   return new Response("Service Available", { status: 200 });
+  },
+
+  // اجرای خودکار زمان‌بندی‌شده (Cron Trigger) جهت ارسال دوره‌ای آمار به مستر
+  async scheduled(event, env, ctx) {
+    if (typeof flushPendingTraffic === "function") {
+      ctx.waitUntil(flushPendingTraffic(env, true));
+    }
   }
 };

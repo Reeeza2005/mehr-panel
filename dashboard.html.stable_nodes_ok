@@ -3363,14 +3363,7 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                       }).catch(() => null);
                       clearTimeout(t);
                       if (res && res.ok) {
-                          let sData = {};
-                          try { sData = await res.json(); } catch(_) {}
-                          window.clusterNodeStats.nodes[p.url] = { 
-                              online: true, 
-                              latency: Date.now() - st, 
-                              totalBytes: Number(sData.bytes || 0),
-                              reqs: Number(sData.reqs || 0)
-                          };
+                          window.clusterNodeStats.nodes[p.url] = { online: true, latency: Date.now() - st, totalBytes: 0 };
                       } else {
                           window.clusterNodeStats.nodes[p.url] = { online: false, latency: 0, totalBytes: 0 };
                       }
@@ -3406,7 +3399,7 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                               ${statusBadge}
                           </div>
                           <div class="flex items-center gap-3 text-[11px] text-slate-400 dark:text-slate-500 font-mono">
-                              <span>مصرف: <strong class="text-slate-600 dark:text-slate-300">${info.totalBytes > 0 && info.totalBytes < 1073741824 ? (info.totalBytes / (1024 * 1024)).toFixed(1) + " MB" : (info.totalBytes / (1024 * 1024 * 1024)).toFixed(2) + " GB"}</strong></span><span>ریکوئست: <strong class="text-indigo-500">${info.reqs || 0} r</strong></span>
+                              <span>مصرف عبوری: <strong class="text-slate-600 dark:text-slate-300">${trafficGb} GB</strong></span>
                               <span>کلید: ${p.apiKey.substring(0, 10)}...</span>
                           </div>
                       </div>

@@ -1,18 +1,3 @@
-
-async function cachedD1Get(env, key) {
-    try {
-        const row = await env.IOT_DB.prepare("SELECT value FROM kv_store WHERE key = ?").bind(key).first();
-        return row ? row.value : null;
-    } catch(e) { return null; }
-}
-
-async function cachedD1Put(env, key, value) {
-    try {
-        await env.IOT_DB.prepare("INSERT INTO kv_store (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(key, typeof value === "string" ? value : JSON.stringify(value)).run();
-    } catch(e) {}
-}
-
-let sysUsageCache = { users: {} };
 function safeBtoa(str) {
     try {
         const bytes = new TextEncoder().encode(str);
@@ -413,45 +398,6 @@ export default {
                   }), { status: 200, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } });
               } catch (e) {
                   return new Response(JSON.stringify({ ok: true, latency: 120, ws_ok: true, blocked: false }), {
-                      status: 200,
-                      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
-                  });
-              }
-          }
-
-                  if (reqPath === "/api/status") {
-              try {
-                  let totalBytes = 0;
-                  let totalReqs = 0;
-                  try {
-                      const raw = await d1Get(env, "sys_usage");
-                      if (raw) {
-                          const parsed = JSON.parse(raw);
-                          const uMap = parsed.users || parsed || {};
-                          for (const k in uMap) {
-                              if (uMap[k]) {
-                                  totalBytes += Number(uMap[k].bytes || 0);
-                                  totalReqs += Number(uMap[k].reqs || 0);
-                              }
-                          }
-                      }
-                  } catch(_) {}
-                  return new Response(JSON.stringify({
-                      ok: true,
-                      online: true,
-                      bytes: totalBytes,
-                      reqs: totalReqs,
-                      timestamp: Date.now()
-                  }), {
-                      status: 200,
-                      headers: {
-                          "Content-Type": "application/json",
-                          "Access-Control-Allow-Origin": "*",
-                          "Access-Control-Allow-Headers": "*"
-                      }
-                  });
-              } catch(e) {
-                  return new Response(JSON.stringify({ ok: true, bytes: 0, reqs: 0 }), {
                       status: 200,
                       headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
                   });
@@ -1251,31 +1197,12 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
                     GROUP BY n.id
                     ORDER BY n.created_at DESC
                 `).all();
-                let cfStats = null;
-                if (sysConfig.cfAccountId && sysConfig.cfApiToken) {
-                    try {
-                        cfStats = await fetchCloudflareUsage(sysConfig.cfAccountId, sysConfig.cfApiToken);
-                    } catch(e) {}
-                }
-
-                const computedNodes = (results || []).map(n => {
-                    let dReqs = Number(n.daily_requests || 0);
-                    if (cfStats && cfStats.totalRequests !== undefined) {
-                        // استخراج نام اسکریپت از روی دامنه یا شناسه نود
-                        const targetHost = String(n.address || n.url || n.id || "").replace(/^https?:\/\//, "").split("/")[0].split(":")[0];
-                        const subName = targetHost.split(".")[0];
-                        dReqs = cfStats.totalRequests;
-                    }
-                    return {
-                        ...n,
-                        daily_requests: dReqs,
-                        address: n.address || n.url,
-                        total_bytes: Number(n.total_bytes || 0),
-                        is_online: n.last_seen > 0 && (Math.floor(Date.now() / 1000) - n.last_seen) < 300 && n.status === "active",
-                        country: (n.country && n.country.length === 2 ? (n.country.toUpperCase()) : "US"),
-                        flag: getCountryFlag(n.country || "US")
-                    };
-                });
+                const computedNodes = (results || []).map(n => ({
+                    ...n,
+                    address: n.address || n.url,
+                    total_bytes: Number(n.total_bytes || 0),
+                    is_online: n.last_seen > 0 && (Math.floor(Date.now() / 1000) - n.last_seen) < 300 && n.status === "active", country: (n.country && n.country.length === 2 ? (n.country.toUpperCase()) : "US"), flag: getCountryFlag(n.country || "US")
+                }));
                 return jsonResponse({ success: true, nodes: computedNodes });
             }
                         if (request.method === "PUT") {
@@ -1401,11 +1328,6 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
                 `).bind(nodeId, nodeName, nodeUrl, nodeKey, now, nodeCountry, reqDelta, todayStr, now).run();
 
                 if (b.user_traffic && Array.isArray(b.user_traffic)) {
-                let sysUsageCache = null;
-                try {
-                    const existingCache = await cachedD1Get(env, "sys_usage");
-                    if (existingCache) sysUsageCache = JSON.parse(existingCache);
-                } catch(e) {}
             // ۱. بارگذاری کش مصرف سیستمی جهت نمایش زنده در داشبورد
             if (!sysUsageCache) sysUsageCache = { users: {} };
             if (!sysUsageCache.users) sysUsageCache.users = {};
@@ -1460,11 +1382,7 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
                     uStat.dReqs = (uStat.dReqs || 0) + deltaReqs;
                 }
             }
-            try {
-                await env.IOT_DB.prepare(
-                    "INSERT INTO kv_store (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
-                ).bind("sys_usage", JSON.stringify(sysUsageCache)).run();
-            } catch(e) {}
+            await cachedD1Put(env, "sys_usage", JSON.stringify(sysUsageCache));
         }
 
         const { results: blocked } = await env.IOT_DB.prepare(

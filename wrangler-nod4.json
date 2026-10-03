@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "nod-4",
+  "main": "mehr-agent.js",
+  "compatibility_date": "2024-09-23",
+  "vars": {
+    "NODE_ID": "nod-4",
+    "PANEL_URL": "https://mehr.v5twycq1o.workers.dev",
+    "NODE_KEY": "mehr_sec_nod4_token_2026",
+    "API_KEY": "mehr_sec_nod4_token_2026"
+  }
+}

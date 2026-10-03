@@ -308,7 +308,7 @@ function handleVlessWS(request, env, ctx) {
         return;
       }
 
-      currentUserUuid = parsed.uuid;
+      currentUserUuid = parsed.cleanUuid || parsed.rawUuid || parsed.uuid;
       const vlessResponseHeader = new Uint8Array([parsed.VLVersion[0], 0]);
       const rawPayload = parsed.rawBuffer.slice(parsed.rawDataIndex);
 

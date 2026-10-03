@@ -78,6 +78,14 @@ async function syncWithMaster(env, request, force = false) {
       return;
     }
 
+    let cfDaily = null;
+    try {
+      if (typeof getEdgeNodeCFUsage === "function") {
+        cfDaily = await getEdgeNodeCFUsage(env);
+      }
+    } catch(e) {}
+    const finalRequests = (cfDaily !== null && cfDaily > 0) ? cfDaily : reqsToSend;
+
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 3000);
 
@@ -88,15 +96,15 @@ async function syncWithMaster(env, request, force = false) {
         "X-Node-Key": nodeKey,
         "Authorization": `Bearer ${nodeKey}`
       },
-      let cfEdgeReqs = await getEdgeNodeCFUsage(env);
-      const effectiveReqs = (cfEdgeReqs !== null && cfEdgeReqs > 0) ? cfEdgeReqs : reqsToSend;
+      
+      
 
       body: JSON.stringify({
         node_id: env.NODE_ID || "nod-4",
         timestamp: now,
-        requests_count: effectiveReqs,
+        requests_count: finalRequests,
         requests_delta: effectiveReqs,
-        requests: effectiveReqs,
+        requests: finalRequests,
         country: detectedCountry || "XX",
         user_traffic: trafficSnapshot
       }),

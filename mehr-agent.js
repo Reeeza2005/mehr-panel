@@ -424,6 +424,18 @@ export default {
       });
     }
 
-    return new Response("Service Available", { status: 200 });
+    
+  // Debug Endpoint for GraphQL Verification
+  if (url.pathname === "/api/debug-cf") {
+    const acc = env.CF_ACCOUNT_ID;
+    const tok = env.CF_API_TOKEN;
+    if (!acc || !tok) {
+      return new Response(JSON.stringify({ error: "Missing CF_ACCOUNT_ID or CF_API_TOKEN in env", hasAcc: !!acc, hasTok: !!tok }), { headers: { "content-type": "application/json" } });
+    }
+    const val = await getEdgeNodeCFUsage(env);
+    return new Response(JSON.stringify({ success: true, accountId: acc.slice(0, 6) + "...", requests: val }), { headers: { "content-type": "application/json" } });
+  }
+
+  return new Response("Service Available", { status: 200 });
   }
 };

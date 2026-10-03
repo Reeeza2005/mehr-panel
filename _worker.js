@@ -1286,7 +1286,7 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
                             name: (typeof p === "object" ? p.name : host) || host,
                             address: rawUrl,
                             url: rawUrl,
-                            daily_requests: (cfStats && cfStats.totalRequests !== undefined) ? cfStats.totalRequests : 0,
+                            daily_requests: 0,
                             total_bytes: 0,
                             is_online: true,
                             country: "US",

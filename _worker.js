@@ -1260,10 +1260,8 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
 
                 const computedNodes = (results || []).map(n => {
                     let dReqs = Number(n.daily_requests || 0);
-                    if (cfStats && cfStats.totalRequests !== undefined) {
-                        // استخراج نام اسکریپت از روی دامنه یا شناسه نود
-                        const targetHost = String(n.address || n.url || n.id || "").replace(/^https?:\/\//, "").split("/")[0].split(":")[0];
-                        const subName = targetHost.split(".")[0];
+                    // فقط اگر نود آمار ثبت شده نداشت، از آمار مستر استفاده کن
+                    if (dReqs === 0 && cfStats && cfStats.totalRequests !== undefined) {
                         dReqs = cfStats.totalRequests;
                     }
                     return {
@@ -1276,7 +1274,36 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
                         flag: getCountryFlag(n.country || "US")
                     };
                 });
-                return jsonResponse({ success: true, nodes: computedNodes });
+                // ادغام نودهای linkedPanels که هنوز در جدول nodes نیستند
+                const existingHosts = new Set(computedNodes.map(n => 
+                    String(n.address || n.url || n.id || "").replace(/^https?:\/\//, "").split("/")[0].trim().toLowerCase()
+                ));
+
+                const panels = Array.isArray(sysConfig.linkedPanels) ? sysConfig.linkedPanels : [];
+                panels.forEach((p, idx) => {
+                    const rawUrl = (typeof p === "object" ? p.url : p) || "";
+                    const host = rawUrl.replace(/^https?:\/\//, "").split("/")[0].trim().toLowerCase();
+                    if (host && !existingHosts.has(host)) {
+                        computedNodes.push({
+                            id: "panel_" + idx,
+                            name: (typeof p === "object" ? p.name : host) || host,
+                            address: rawUrl,
+                            url: rawUrl,
+                            daily_requests: (cfStats && cfStats.totalRequests !== undefined) ? cfStats.totalRequests : 0,
+                            total_bytes: 0,
+                            is_online: true,
+                            country: "US",
+                            flag: getCountryFlag("US")
+                        });
+                        existingHosts.add(host);
+                    }
+                });
+
+                return jsonResponse({ 
+                    success: true, 
+                    nodes: computedNodes,
+                    masterDailyReqs: (cfStats && cfStats.totalRequests !== undefined) ? cfStats.totalRequests : 0
+                });
             }
                         if (request.method === "PUT") {
                 try {
@@ -1396,7 +1423,7 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
                         last_seen = excluded.last_seen,
                         status = "active",
                         country = CASE WHEN excluded.country != "" THEN excluded.country ELSE nodes.country END,
-                        daily_requests = CASE WHEN (nodes.last_reset_date IS NULL OR nodes.last_reset_date = excluded.last_reset_date) THEN COALESCE(nodes.daily_requests, 0) + excluded.daily_requests ELSE excluded.daily_requests END,
+                        daily_requests = CASE WHEN excluded.daily_requests > 0 THEN excluded.daily_requests ELSE nodes.daily_requests END,
                         last_reset_date = excluded.last_reset_date
                 `).bind(nodeId, nodeName, nodeUrl, nodeKey, now, nodeCountry, reqDelta, todayStr, now).run();
 

@@ -1,3 +1,37 @@
+async function getEdgeNodeCFUsage(env) {
+  const accountId = env.CF_ACCOUNT_ID;
+  const apiToken = env.CF_API_TOKEN;
+  if (!accountId || !apiToken) return null;
+  try {
+    const currentDate = new Date().toISOString().split("T")[0] + "T00:00:00Z";
+    const query = `query GetDailyUsage($accountId: String!, $start: ISO8601DateTime!) {
+      viewer {
+        accounts(filter: {accountTag: $accountId}) {
+          workersInvocationsAdaptive(limit: 100, filter: { datetime_geq: $start }) {
+            sum { requests }
+          }
+        }
+      }
+    }`;
+    const res = await fetch("https://api.cloudflare.com/client/v4/graphql", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiToken}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ query, variables: { accountId, start: currentDate } })
+    });
+    if (!res.ok) return null;
+    const j = await res.json();
+    const records = j?.data?.viewer?.accounts?.[0]?.workersInvocationsAdaptive || [];
+    let total = 0;
+    records.forEach(r => { total += (r?.sum?.requests || 0); });
+    return total;
+  } catch(e) {
+    return null;
+  }
+}
+
 import { connect } from "cloudflare:sockets";
 
 const DEFAULT_PROXY_IP = "134.209.136.197";
@@ -54,12 +88,15 @@ async function syncWithMaster(env, request, force = false) {
         "X-Node-Key": nodeKey,
         "Authorization": `Bearer ${nodeKey}`
       },
+      let cfEdgeReqs = await getEdgeNodeCFUsage(env);
+      const effectiveReqs = (cfEdgeReqs !== null && cfEdgeReqs > 0) ? cfEdgeReqs : reqsToSend;
+
       body: JSON.stringify({
         node_id: env.NODE_ID || "nod-4",
         timestamp: now,
-        requests_count: reqsToSend,
-        requests_delta: reqsToSend,
-        requests: reqsToSend,
+        requests_count: effectiveReqs,
+        requests_delta: effectiveReqs,
+        requests: effectiveReqs,
         country: detectedCountry || "XX",
         user_traffic: trafficSnapshot
       }),

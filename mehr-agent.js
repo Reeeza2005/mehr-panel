@@ -426,6 +426,19 @@ export default {
 
     
   // Debug Endpoint for GraphQL Verification
+  
+  // Trigger Manual Sync to Panel
+  if (url.pathname === "/api/node/force-sync" || url.pathname === "/api/force-sync") {
+    try {
+      if (typeof flushPendingTraffic === "function") {
+        await flushPendingTraffic(env, true);
+        return new Response(JSON.stringify({ success: true, message: "Sync dispatched to master panel" }), { headers: { "content-type": "application/json" } });
+      }
+    } catch(err) {
+      return new Response(JSON.stringify({ success: false, error: err.message }), { status: 500, headers: { "content-type": "application/json" } });
+    }
+  }
+
   if (url.pathname === "/api/debug-cf") {
     const acc = env.CF_ACCOUNT_ID;
     const tok = env.CF_API_TOKEN;

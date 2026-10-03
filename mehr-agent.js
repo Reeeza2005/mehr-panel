@@ -430,8 +430,8 @@ export default {
   // Trigger Manual Sync to Panel
   if (url.pathname === "/api/node/force-sync" || url.pathname === "/api/force-sync") {
     try {
-      if (typeof flushPendingTraffic === "function") {
-        await flushPendingTraffic(env, true);
+      if (typeof syncWithMaster === "function") {
+        await syncWithMaster(env, request, true);
         return new Response(JSON.stringify({ success: true, message: "Sync dispatched to master panel" }), { headers: { "content-type": "application/json" } });
       }
     } catch(err) {
@@ -454,8 +454,8 @@ export default {
 
   // اجرای خودکار زمان‌بندی‌شده (Cron Trigger) جهت ارسال دوره‌ای آمار به مستر
   async scheduled(event, env, ctx) {
-    if (typeof flushPendingTraffic === "function") {
-      ctx.waitUntil(flushPendingTraffic(env, true));
+    if (typeof syncWithMaster === "function") {
+      ctx.waitUntil(syncWithMaster(env, null, true));
     }
   }
 };

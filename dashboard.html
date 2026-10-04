@@ -5417,70 +5417,19 @@ function buildModeCheckboxes(wrapId, userMode) {
         }
     };
 
-     window.removeLinkedNode = async function (idx) {
-         if (!confirm("آیا از حذف کامل این نود از داشبورد، دیتابیس و تمام کاربران اطمینان دارید؟")) return;
-         const cfg = (typeof getActivePanelConfig === "function") ? getActivePanelConfig() : (window.nahanConfig || {});
-         let targetNode = null;
-         if (cfg.linkedPanels && cfg.linkedPanels[idx]) {
-             targetNode = cfg.linkedPanels[idx];
-             cfg.linkedPanels.splice(idx, 1);
-         }
-         const nodeId = targetNode?.id || (targetNode?.url ? targetNode.url.replace(/^https?:\/\//, "").split("/")[0].split(".")[0] : null);
-         const nodeHost = targetNode?.url ? targetNode.url.replace(/^https?:\/\//, "").split("/")[0].split(":")[0].trim().toLowerCase() : "";
-         if (window.clusterNodeStats && window.clusterNodeStats.nodes) {
-             delete window.clusterNodeStats.nodes[nodeHost];
-             if (nodeId) delete window.clusterNodeStats.nodes[nodeId];
-         }
-         try {
-             if (nodeId || nodeHost) {
-                 await fetch("/api/nodes", {
-                     method: "DELETE",
-                     headers: { "Content-Type": "application/json" },
-                     body: JSON.stringify({ id: nodeId, host: nodeHost, url: targetNode?.url })
-                 });
-             }
-             if (typeof doSaveDirectly === "function") await doSaveDirectly();
-         } catch(e) {}
-         if (typeof window.renderTabNodes === "function") window.renderTabNodes();
-         if (typeof showToast === "function") showToast("نود با موفقیت از سیستم و کاربران حذف شد.", "success");
-     };
-
-     window.assignNodeToAllUsers = async function (nodeIdentifier, btnEl) {
-         if (!confirm(`آیا می‌خواهید نود ${nodeIdentifier} را به تمام کاربران اضافه کنید؟`)) return;
-         if (btnEl) {
-             btnEl.disabled = true;
-             btnEl.classList.add("opacity-50");
-         }
-         try {
-             const res = await fetch("/api/nodes", {
-                 method: "PUT",
-                 headers: { "Content-Type": "application/json" },
-                 body: JSON.stringify({ id: nodeIdentifier, host: nodeIdentifier })
-             });
-             const data = await res.json();
-             if (data.success) {
-                 if (typeof showToast === "function") showToast(`نود با موفقیت به ${data.updatedUsers || 0} کاربر اضافه شد.`, "success");
-                 if (window.nahanConfig && Array.isArray(window.nahanConfig.users)) {
-                     window.nahanConfig.users.forEach(u => {
-                         let parts = String(u.userNodes || "").split(",").map(p => p.trim()).filter(Boolean);
-                         if (!parts.includes(nodeIdentifier)) {
-                             parts.push(nodeIdentifier);
-                             u.userNodes = parts.join(",");
-                         }
-                     });
-                 }
-             } else {
-                 if (typeof showToast === "function") showToast(data.error || "خطا در انتساب نود", "error");
-             }
-         } catch(e) {
-             if (typeof showToast === "function") showToast("خطا در ارتباط با سرور", "error");
-         } finally {
-             if (btnEl) {
-                 btnEl.disabled = false;
-                 btnEl.classList.remove("opacity-50");
-             }
-         }
-     };
+    window.removeLinkedNode = function (idx) {
+        if (!confirm("آیا از حذف این نود اطمینان دارید؟")) return;
+        const cfg = (typeof getActivePanelConfig === "function") ? getActivePanelConfig() : (window.nahanConfig || {});
+        if (cfg.linkedPanels && cfg.linkedPanels[idx]) {
+            cfg.linkedPanels.splice(idx, 1);
+            if (typeof doSaveDirectly === "function") {
+                doSaveDirectly();
+            } else if (typeof doSave === "function") {
+                doSave();
+            }
+            window.renderTabNodes();
+            if (typeof showToast === "function") showToast("نود با موفقیت حذف شد.", "success");
+        }
     };
 
     // تست ارتباط معتبر با استفاده از Image Ping که محدودیت CORS ندارد
@@ -5823,15 +5772,9 @@ function buildModeCheckboxes(wrapId, userMode) {
                         <button id="btn-ping-${idx}" onclick="testSingleNode('${host}', 'btn-ping-${idx}')" class="flex-1 py-2 px-3 text-xs font-bold rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 dark:bg-primary/20 dark:text-primary transition flex items-center justify-center gap-1.5 shadow-sm">
                             <span>تست پینگ</span>
                         </button>
-                        <button onclick="window.assignNodeToAllUsers('${host}', this)" class="py-2 px-3 text-xs font-bold rounded-xl bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-500/20 transition flex items-center justify-center gap-1 shadow-sm" title="اضافه کردن این سرور به لیست نودهای تمام کاربران">
-                             <span>👥 افزودن به همه کاربران</span>
-                         </button>
-                         <button onclick="window.assignNodeToAllUsers('${host}', this)" class="py-2 px-3 text-xs font-bold rounded-xl bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-500/20 transition flex items-center justify-center gap-1 shadow-sm" title="اضافه کردن این سرور به لیست نودهای تمام کاربران">
-                             <span>👥 افزودن به همه کاربران</span>
-                         </button>
-                         <button onclick="removeLinkedNode(${idx})" class="py-2 px-3 text-xs font-bold rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/20 transition flex items-center justify-center gap-1 shadow-sm">
-                             <span>حذف</span>
-                         </button>
+                        <button onclick="removeLinkedNode(${idx})" class="py-2 px-3 text-xs font-bold rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/20 transition flex items-center justify-center gap-1 shadow-sm">
+                            <span>حذف</span>
+                        </button>
                     </div>
                 </div>
             `;

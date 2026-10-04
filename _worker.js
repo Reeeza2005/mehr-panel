@@ -1309,28 +1309,32 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
 
         if (reqPath.endsWith("/api/nodes/force-refresh-all") && request.method === "POST") {
         try {
-          const { results: nodes } = await env.IOT_DB.prepare("SELECT id, url, api_key FROM nodes WHERE status != 'deleted'").all();
+          const { results: nodes } = await env.IOT_DB.prepare("SELECT id, name, url, api_key FROM nodes WHERE status != 'deleted'").all();
           const nowTs = Math.floor(Date.now() / 1000);
           const todayStr = new Date().toISOString().split("T")[0];
           const tasks = (nodes || []).map(async (n) => {
-            if (!n.url) return;
+            if (!n.url && !n.id) return;
             try {
-              const base = n.url.replace(/\/+$/, "");
-              // ابتدا خواندن مستقیم آمار نود (Pull Model)
-              const statRes = await fetch(`${base}/api/stats`, {
-                headers: { "X-Node-Key": n.api_key || "" },
-                signal: AbortSignal.timeout(6000)
-              }).catch(() => null);
-
+              const base = (n.url || "").replace(/\/+$/, "");
               let reqs = 0;
               let fetched = false;
 
-              if (statRes && statRes.ok) {
-                const sJson = await statRes.json().catch(() => null);
-                reqs = parseInt(sJson?.daily_requests ?? sJson?.requests ?? 0) || 0;
-                fetched = true;
-              } else {
-                // اگر خطای 1042 داد، مستقیماً از کلادفلر بخوان
+              // اگر آدرس وجود دارد، تلاش اول با HTTP با تایم‌اوت کوتاه ۳ ثانیه‌ای
+              if (base) {
+                const statRes = await fetch(`${base}/api/stats`, {
+                  headers: { "X-Node-Key": n.api_key || "" },
+                  signal: AbortSignal.timeout(3000)
+                }).catch(() => null);
+
+                if (statRes && statRes.ok) {
+                  const sJson = await statRes.json().catch(() => null);
+                  reqs = parseInt(sJson?.daily_requests ?? sJson?.requests ?? 0) || 0;
+                  fetched = true;
+                }
+              }
+
+              // اگر HTTP ناموفق بود (مانند خطای 1042 ساب‌دامین مشترک)، مستقیماً از کلادفلر بخوان
+              if (!fetched) {
                 const scriptName = n.name || n.id;
                 const directReqs = await getWorkerCFUsageDirect(env, scriptName);
                 if (directReqs !== null) {
@@ -1344,13 +1348,6 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
                   "UPDATE nodes SET daily_requests = ?, last_reset_date = ?, last_seen = ?, status = 'active' WHERE id = ?"
                 ).bind(reqs, todayStr, nowTs, n.id).run();
               }
-
-              // تریگر همگام‌سازی نودهای متفرقه
-              await fetch(`${base}/api/node/force-sync`, {
-                method: "POST",
-                headers: { "X-Node-Key": n.api_key || "" },
-                signal: AbortSignal.timeout(3000)
-              }).catch(() => null);
             } catch(e) {}
           });
           await Promise.allSettled(tasks);

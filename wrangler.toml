@@ -1,4 +1,4 @@
-account_id = "aa639a109164fcb56c915326b7b269ad"
+account_id = "YOUR_CLOUDFLARE_ACCOUNT_ID"
 name = "mehr"
 main = "_worker.js"
 compatibility_date = "2024-09-01"

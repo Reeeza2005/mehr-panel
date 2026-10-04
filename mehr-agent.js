@@ -429,6 +429,11 @@ export default {
   
   // Trigger Manual Sync to Panel
   if (url.pathname === "/api/node/force-sync" || url.pathname === "/api/force-sync") {
+    const nodeKey = env.API_KEY || env.CLUSTER_KEY || env.NODE_KEY;
+    const reqKey = request.headers.get("X-Node-Key") || request.headers.get("Authorization")?.replace("Bearer ", "");
+    if (nodeKey && reqKey !== nodeKey) {
+      return new Response(JSON.stringify({ success: false, error: "Unauthorized" }), { status: 401, headers: { "content-type": "application/json" } });
+    }
     try {
       if (typeof syncWithMaster === "function") {
         await syncWithMaster(env, request, true);
@@ -440,6 +445,11 @@ export default {
   }
 
   if (url.pathname === "/api/debug-cf") {
+    const nodeKey = env.API_KEY || env.CLUSTER_KEY || env.NODE_KEY;
+    const reqKey = request.headers.get("X-Node-Key") || request.headers.get("Authorization")?.replace("Bearer ", "");
+    if (nodeKey && reqKey !== nodeKey) {
+      return new Response(JSON.stringify({ success: false, error: "Unauthorized" }), { status: 401, headers: { "content-type": "application/json" } });
+    }
     const acc = env.CF_ACCOUNT_ID;
     const tok = env.CF_API_TOKEN;
     if (!acc || !tok) {

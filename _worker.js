@@ -1241,7 +1241,33 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
         }
 
         // مدیریت نودها در دیتابیس رابطه‌ای D1
-        if (reqPath === `${routeBase}/api/nodes` || reqPath.endsWith("/api/nodes")) {
+        if (reqPath.endsWith("/api/nodes/force-refresh-all") && request.method === "POST") {
+        try {
+          const { results: nodes } = await env.IOT_DB.prepare("SELECT id, url, api_key FROM nodes WHERE status != 'deleted'").all();
+          const tasks = (nodes || []).map(async (n) => {
+            if (!n.url) return;
+            try {
+              const syncUrl = `${n.url.replace(/\/+$/, "")}/api/node/force-sync`;
+              await fetch(syncUrl, {
+                method: "POST",
+                headers: { "X-Node-Key": n.api_key || "" },
+                signal: AbortSignal.timeout(4000)
+              });
+            } catch(e) {}
+          });
+          await Promise.allSettled(tasks);
+          return new Response(JSON.stringify({ success: true, message: "Triggered refresh on all nodes" }), {
+            headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
+          });
+        } catch (err) {
+          return new Response(JSON.stringify({ success: false, error: err.message }), {
+            status: 500,
+            headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
+          });
+        }
+      }
+
+      if (reqPath === `${routeBase}/api/nodes` || reqPath.endsWith("/api/nodes")) {
             if (request.method === "GET") {
                 const { results } = await env.IOT_DB.prepare(`
                     SELECT n.*, 

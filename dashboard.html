@@ -5486,7 +5486,17 @@ function buildModeCheckboxes(wrapId, userMode) {
 
     window.autoCheckNodesHealth = async function () {
         const cfg = (typeof getActivePanelConfig === "function") ? getActivePanelConfig() : (window.nahanConfig || {});
-        const panels = Array.isArray(cfg.linkedPanels) ? cfg.linkedPanels : [];
+        let panels = Array.isArray(cfg.linkedPanels) ? [...cfg.linkedPanels] : [];
+          // اگر آرایه لوکال خالی بود یا نودهای دیتابیس بیشتر بودند، مستقیماً از نودهای دیتابیس استفاده کن
+          if (window.clusterNodeStats && window.clusterNodeStats.nodes) {
+              const dbHosts = Object.keys(window.clusterNodeStats.nodes);
+              dbHosts.forEach(h => {
+                  const exists = panels.some(p => ((typeof p === "object" ? p.url : p) || "").toLowerCase().includes(h.toLowerCase()));
+                  if (!exists) {
+                      panels.push({ id: h, name: h, url: "https://" + h, apiKey: "" });
+                  }
+              });
+          }
         for (let p of panels) {
             const rawUrl = (typeof p === "object" ? p.url : p) || "";
             const host = cleanHost(rawUrl);

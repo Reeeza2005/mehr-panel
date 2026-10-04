@@ -419,6 +419,50 @@ export default {
       });
     }
 
+    
+    if (url.pathname === "/api/test-sync") {
+      const panelUrl = (env.PANEL_URL || "").trim();
+      const nodeKey = env.API_KEY || env.CLUSTER_KEY || env.NODE_KEY;
+      let cfDaily = null;
+      try {
+        if (typeof getEdgeNodeCFUsage === "function") {
+          cfDaily = await getEdgeNodeCFUsage(env);
+        }
+      } catch(e) {}
+
+      const cleanUrl = panelUrl.replace(/\/+$/, "") + "/api/node/sync";
+      try {
+        const res = await fetch(cleanUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Node-Key": nodeKey || ""
+          },
+          body: JSON.stringify({
+            node_id: env.NODE_ID || "nod-4",
+            daily_requests: cfDaily || 0,
+            country: "US"
+          })
+        });
+        const resText = await res.text();
+        return new Response(JSON.stringify({
+          success: res.ok,
+          status: res.status,
+          target_url: cleanUrl,
+          sent_node_key: nodeKey ? nodeKey.slice(0, 10) + "..." : null,
+          cfDaily,
+          response: resText
+        }), { headers: { "Content-Type": "application/json" } });
+      } catch(err) {
+        return new Response(JSON.stringify({
+          success: false,
+          target_url: cleanUrl,
+          error: err.message,
+          stack: err.stack
+        }), { status: 500, headers: { "Content-Type": "application/json" } });
+      }
+    }
+
     if (path === "/api/status" || path === "/api/stats") {
       return new Response(JSON.stringify({
         status: "active",

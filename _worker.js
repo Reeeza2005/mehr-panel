@@ -350,6 +350,17 @@ function jsonResponse(data, status = 200) {
 }
 
 export default {
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil((async () => {
+      try {
+        const now = Math.floor(Date.now() / 1000);
+        await env.IOT_DB.prepare(
+          "UPDATE nodes SET status = 'inactive' WHERE ? - last_seen > 300 AND status = 'active'"
+        ).bind(now).run();
+      } catch (e) {}
+    })());
+  },
+
     async fetch(request, env, ctx) {
         await loadConfig(env);
         const url = new URL(request.url);

@@ -4033,7 +4033,7 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
 
                   const totalLabel = lang === 'fa' ? 'کل:' : 'Total:';
                   const dailyLabel = lang === 'fa' ? 'روزانه:' : 'Daily:';
-                  const rLabel = lang === 'fa' ? 'درخواست' : 'r';
+                  const rLabel = 'GB';
 
                   let linkTitle = lang === 'fa' ? 'کپی لینک ساب' : 'Copy Subscription Link';
                   let pauseTitle = u.isPaused ? (lang === 'fa' ? 'فعال‌سازی کاربر' : 'Resume User') : (lang === 'fa' ? 'توقف کاربر' : 'Pause User');
@@ -5402,13 +5402,22 @@ function buildModeCheckboxes(wrapId, userMode) {
         }
     };
 
-    window.toggleNodeUpstream = function (idx, enabled) {
-        const cfg = (typeof getActivePanelConfig === "function") ? getActivePanelConfig() : (window.nahanConfig || {});
-        if (cfg.linkedPanels && cfg.linkedPanels[idx]) {
-            cfg.linkedPanels[idx].useUpstream = !!enabled;
-            if (typeof showToast === "function") showToast(enabled ? "هدایت نود به Upstream فعال شد." : "هدایت نود به Upstream غیرفعال شد.", "info");
-        }
-    };
+    window.toggleNodeUpstream = async function (idx, enabled) {
+         const cfg = (typeof getActivePanelConfig === "function") ? getActivePanelConfig() : (window.nahanConfig || {});
+         if (cfg.linkedPanels && cfg.linkedPanels[idx]) {
+             cfg.linkedPanels[idx].useUpstream = !!enabled;
+             if (typeof doSaveDirectly === "function") {
+                 await doSaveDirectly();
+             } else if (typeof doSave === "function") {
+                 await doSave();
+             } else if (typeof saveConfig === "function") {
+                 await saveConfig();
+             }
+             if (typeof showToast === "function") {
+                 showToast(enabled ? "هدایت نود به Upstream فعال و ذخیره شد." : "هدایت نود به Upstream غیرفعال شد.", "success");
+             }
+         }
+     };
 
     window.removeLinkedNode = function (idx) {
         if (!confirm("آیا از حذف این نود اطمینان دارید؟")) return;
@@ -5513,46 +5522,63 @@ function buildModeCheckboxes(wrapId, userMode) {
     };
 
     window.syncNodesTrafficStats = async function() {
-        try {
-            const apiBase = (window.nahanConfig?.apiRoute || "sync").replace(/^\/+|\/+$/g, "");
-            const sRes = await fetch("/" + apiBase + "/api/stats");
-            if (sRes.ok) {
-                const sData = await sRes.json();
-                window.clusterNodeStats = window.clusterNodeStats || { nodes: {} };
-                const t = sData?.stats?.traffic || {};
-                window.clusterNodeStats.masterTotalBytes = Number(t.totalGB || 0) * 1073741824;
-                window.clusterNodeStats.masterTodayBytes = Number(t.dailyGB || 0) * 1073741824;
-                window.clusterNodeStats.masterDailyReqs = Number(t.dailyRequests ?? t.totalRequests ?? 0);
-            }
-        } catch(e) {}
-        try {
-            const apiBase = (window.nahanConfig?.apiRoute || "sync").replace(/^\/+|\/+$/g, "");
-            const res = await fetch("/" + apiBase + "/api/nodes");
-            if (res.ok) {
-                const data = await res.json();
-                if (data.success && Array.isArray(data.nodes)) {
-                    window.clusterNodeStats = window.clusterNodeStats || { nodes: {} };
-                    window.clusterNodeStats.nodes = window.clusterNodeStats.nodes || {};
-                    data.nodes.forEach(n => {
-                        const h = (n.url || n.address || "").replace(/^https?:\/\//, "").split("/")[0].trim().toLowerCase();
-                        if (!h) return;
-                        window.clusterNodeStats.nodes[h] = {
-                            ...(window.clusterNodeStats.nodes[h] || {}),
-                            total_bytes: Number(n.total_bytes || 0),
-                            today_bytes: Number(n.total_bytes || 0),
-                            daily_requests: Number(n.daily_requests || 0),
-                            country: n.country || "US",
-                            flag: n.flag || "",
-                            is_online: n.is_online === true,
-                            online: n.is_online === true
-                        };
-                    });
-                }
-            }
-        } catch(e) {}
-    };
+         try {
+             const apiBase = (window.nahanConfig?.apiRoute || "sync").replace(/^\/+|\/+$/g, "");
+             const sRes = await fetch("/" + apiBase + "/api/stats");
+             if (sRes.ok) {
+                 const sData = await sRes.json();
+                 window.clusterNodeStats = window.clusterNodeStats || { nodes: {}, users: {} };
+                 const t = sData?.stats?.traffic || {};
+                 window.clusterNodeStats.masterTotalBytes = Number(t.totalBytes || (Number(t.totalGB || 0) * 1073741824));
+                 window.clusterNodeStats.masterTodayBytes = Number(t.dailyBytes || (Number(t.dailyGB || 0) * 1073741824));
+                 window.clusterNodeStats.masterDailyReqs = Number(t.dailyRequests ?? t.totalRequests ?? 0);
 
-    window.renderTabNodes = function () {
+                 // سینک مصرف تک‌تک کاربران در حافظه داشبورد
+                 window.nahanUsage = window.nahanUsage || {};
+                 if (sData?.stats?.usage) {
+                     for (const uid in sData.stats.usage) {
+                         const uInfo = sData.stats.usage[uid];
+                         window.nahanUsage[uid] = {
+                             bytes: Number(uInfo.bytes || 0),
+                             dBytes: Number(uInfo.dBytes || 0),
+                             reqs: Math.round(Number(uInfo.bytes || 0) / 178956),
+                             dReqs: Math.round(Number(uInfo.dBytes || 0) / 178956),
+                             lastDay: new Date().toISOString().split('T')[0]
+                         };
+                         window.clusterNodeStats.users[uid] = Number(uInfo.bytes || 0);
+                     }
+                 }
+                 if (typeof renderUsersTable === "function") renderUsersTable();
+             }
+         } catch(e) {}
+         try {
+             const apiBase = (window.nahanConfig?.apiRoute || "sync").replace(/^\/+|\/+$/g, "");
+             const res = await fetch("/" + apiBase + "/api/nodes");
+             if (res.ok) {
+                 const data = await res.json();
+                 if (data.success && Array.isArray(data.nodes)) {
+                     window.clusterNodeStats = window.clusterNodeStats || { nodes: {}, users: {} };
+                     window.clusterNodeStats.nodes = window.clusterNodeStats.nodes || {};
+                     data.nodes.forEach(n => {
+                         const h = (n.url || n.address || "").replace(/^https?:\/\//, "").split("/")[0].trim().toLowerCase();
+                         if (!h) return;
+                         window.clusterNodeStats.nodes[h] = {
+                             ...(window.clusterNodeStats.nodes[h] || {}),
+                             total_bytes: Number(n.total_bytes || 0),
+                             today_bytes: Number(n.today_bytes || n.total_bytes || 0),
+                             daily_requests: Number(n.daily_requests || 0),
+                             country: n.country || "US",
+                             flag: n.flag || "",
+                             is_online: n.is_online === true,
+                             online: n.is_online === true
+                         };
+                     });
+                     if (typeof window.renderTabNodes === "function") window.renderTabNodes();
+                 }
+             }
+         } catch(e) {}
+     };
+window.renderTabNodes = function () {
         const isEn = (localStorage.getItem("nahan_lang") === "en" || document.documentElement.lang === "en");
         const grid = document.getElementById("tab-nodes-grid");
         const badge = document.getElementById("tab-cluster-capacity-badge");
@@ -5883,5 +5909,19 @@ function buildModeCheckboxes(wrapId, userMode) {
     };
 
 </script>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  // بارگذاری بلافاصله اطلاعات هنگام باز شدن پنل
+  if (typeof fetchNodes === "function") fetchNodes();
+  if (typeof loadDashboardStats === "function") loadDashboardStats();
+
+  // بروزرسانی دوره‌ای داخل مرورگر در زمان باز ماندن تب
+  setInterval(() => {
+    if (typeof fetchNodes === "function") fetchNodes();
+  }, 30000);
+});
+</script>
+
 </body>
 </html>

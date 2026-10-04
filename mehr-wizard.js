@@ -224,7 +224,7 @@ async function deployEdgeNode(token, accountId, nodeName, customMasterUrl = "") 
         compatibility_date: new Date().toISOString().split("T")[0],
         compatibility_flags: ["nodejs_compat"],
         bindings: [
-            { type: "plain_text", name: "PANEL_URL", text: masterUrl },
+            { type: "plain_text", name: "PANEL_URL", text: new URL(masterUrl.startsWith("http") ? masterUrl : `https://${masterUrl}`).origin },
             { type: "plain_text", name: "CLUSTER_KEY", text: clusterSecret },
             { type: "plain_text", name: "API_KEY", text: nodeApiKey },
             { type: "plain_text", name: "NODE_ID", text: nodeName },

@@ -62,7 +62,13 @@ async function syncWithMaster(env, request, force = false) {
       return;
     }
 
-    const panelUrl = env.PANEL_URL;
+    let panelUrl = (env.PANEL_URL || "").trim();
+    try {
+      const parsed = new URL(panelUrl.startsWith("http") ? panelUrl : `https://${panelUrl}`);
+      panelUrl = parsed.origin;
+    } catch(e) {
+      panelUrl = panelUrl.replace(/\/+$/, "");
+    }
     const nodeKey = env.API_KEY || env.CLUSTER_KEY || env.NODE_KEY;
     if (!panelUrl || !nodeKey) return;
 

@@ -5706,7 +5706,10 @@ function buildModeCheckboxes(wrapId, userMode) {
                         <button id="btn-ping-${idx}" onclick="testSingleNode('${host}', 'btn-ping-${idx}')" class="flex-1 py-2 px-3 text-xs font-bold rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 dark:bg-primary/20 dark:text-primary transition flex items-center justify-center gap-1.5 shadow-sm">
                             <span>تست پینگ</span>
                         </button>
-                        <button onclick="removeLinkedNode(${idx})" class="py-2 px-3 text-xs font-bold rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/20 transition flex items-center justify-center gap-1 shadow-sm">
+                        <button onclick="assignNodeToAllUsers('${host}')" title="افزودن به همه کاربران" class="py-2 px-2.5 text-xs font-bold rounded-xl bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-500/20 transition flex items-center justify-center gap-1 shadow-sm">
+                            <span>👥 افزودن به همه</span>
+                        </button>
+                        <button onclick="purgeLinkedNode('${host}',${idx})" title="حذف کامل" class="py-2 px-3 text-xs font-bold rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/20 transition flex items-center justify-center gap-1 shadow-sm">
                             <span>حذف</span>
                         </button>
                     </div>
@@ -5777,6 +5780,48 @@ function buildModeCheckboxes(wrapId, userMode) {
                 btnEl.disabled = false;
                 btnEl.classList.remove("opacity-50", "animate-pulse");
             }
+        }
+    };
+
+
+    window.assignNodeToAllUsers = async function(nodeHost) {
+        if (!confirm(`آیا مطمئن هستید که می‌خواهید سرور "${nodeHost}" را به همه کاربران اختصاص دهید؟`)) return;
+        try {
+            const res = await fetch("/api/nodes", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "assign_all", node: nodeHost })
+            });
+            const data = await res.json();
+            if (data.success) {
+                if (typeof showToast === "function") showToast(data.message || "با موفقیت به همه اضافه شد", "success");
+            } else {
+                alert("خطا: " + (data.error || "عملیات ناموفق بود"));
+            }
+        } catch (err) {
+            alert("خطا در ارتباط با سرور: " + err.message);
+        }
+    };
+
+    window.purgeLinkedNode = async function(nodeHost, idx) {
+        if (!confirm(`آیا از حذف کامل سرور "${nodeHost}" مطمئن هستید؟ این سرور از دیتابیس و تمام کاربران حذف خواهد شد.`)) return;
+        try {
+            const res = await fetch(`/api/nodes?host=${encodeURIComponent(nodeHost)}`, {
+                method: "DELETE"
+            });
+            const data = await res.json();
+            if (data.success) {
+                if (typeof showToast === "function") showToast("سرور با موفقیت حذف شد", "success");
+                if (typeof removeLinkedNode === "function") {
+                    removeLinkedNode(idx);
+                } else {
+                    location.reload();
+                }
+            } else {
+                alert("خطا در حذف سرور: " + (data.error || "نامشخص"));
+            }
+        } catch (err) {
+            alert("خطا در ارتباط: " + err.message);
         }
     };
 

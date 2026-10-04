@@ -1252,54 +1252,77 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
                 ).run();
                 return jsonResponse({ success: true, country: country });
             }
-            if (request.method === "DELETE") {
-                const b = await request.json();
-                
-                // ۱. دریافت آدرس و مشخصات نود پیش از حذف
-                let nodeHost = "";
+                        if (request.method === "POST") {
                 try {
-                    const nRow = await env.IOT_DB.prepare("SELECT address, url FROM nodes WHERE id = ?").bind(b.id).first();
-                    if (nRow) {
-                        const raw = nRow.address || nRow.url || "";
-                        nodeHost = raw.replace(/^https?:\/\//, "").split("/")[0].split(":")[0].trim().toLowerCase();
+                    const b = await request.json();
+                    if (b.action === "assign_all") {
+                        const targetNode = (b.node || "").trim();
+                        if (!targetNode) return jsonResponse({ success: false, error: "Node required" }, 400);
+
+                        let sysConfig = {};
+                        const rawConf = await d1Get(env, "sys_config");
+                        if (rawConf) sysConfig = JSON.parse(rawConf);
+
+                        let users = Array.isArray(sysConfig.users) ? sysConfig.users : [];
+                        let updatedCount = 0;
+                        users.forEach(u => {
+                            let uNodes = Array.isArray(u.userNodes) ? u.userNodes : [];
+                            if (!uNodes.includes(targetNode)) {
+                                uNodes.push(targetNode);
+                                u.userNodes = uNodes;
+                                updatedCount++;
+                            }
+                        });
+
+                        sysConfig.users = users;
+                        await d1Put(env, "sys_config", JSON.stringify(sysConfig));
+                        return jsonResponse({ success: true, count: updatedCount, message: `نود با موفقیت به ${updatedCount} کاربر تخصیص یافت.` });
                     }
                 } catch(e) {}
+            }
 
-                // ۲. حذف از دیتابیس D1
-                await env.IOT_DB.prepare("DELETE FROM nodes WHERE id = ?").bind(b.id).run();
+            if (request.method === "DELETE") {
+                try {
+                    const urlObj = new URL(request.url);
+                    const targetId = urlObj.searchParams.get("id");
+                    const nodeHost = urlObj.searchParams.get("host");
 
-                // ۳. پاکسازی آبشاری نود از لیست تمامی کاربران
-                if (nodeHost && Array.isArray(sysConfig.users)) {
-                    let hasChanges = false;
-                    sysConfig.users.forEach(u => {
-                        if (u.userNodes) {
-                            const rawStr = Array.isArray(u.userNodes) ? u.userNodes.join(",") : String(u.userNodes);
-                            const parts = rawStr.split(",");
-                            const filtered = parts.map(n => n.trim()).filter(n => {
-                                if (!n) return false;
-                                const clean = n.replace(/^https?:\/\//, "").split("/")[0].split(":")[0].trim().toLowerCase();
-                                return clean !== nodeHost && clean !== b.id;
+                    if (targetId) {
+                        try { await env.IOT_DB.prepare("DELETE FROM nodes WHERE id = ?").bind(targetId).run(); } catch(e){}
+                    }
+                    if (nodeHost) {
+                        try { await env.IOT_DB.prepare("DELETE FROM nodes WHERE name = ? OR ip = ?").bind(nodeHost, nodeHost).run(); } catch(e){}
+                        try { await env.IOT_DB.prepare("DELETE FROM node_traffic WHERE node_id = ?").bind(nodeHost).run(); } catch(e){}
+                    }
+
+                    // پاک‌سازی از کانفیگ و لیست کاربران
+                    let sysConfig = {};
+                    const rawConf = await d1Get(env, "sys_config");
+                    if (rawConf) {
+                        sysConfig = JSON.parse(rawConf);
+                        if (Array.isArray(sysConfig.linkedPanels)) {
+                            sysConfig.linkedPanels = sysConfig.linkedPanels.filter(p => {
+                                const h = typeof p === "object" ? (p.url || p.name || "") : p;
+                                return !h.includes(nodeHost || targetId);
                             });
-                            
-                            const newNodesVal = Array.isArray(u.userNodes) ? filtered : filtered.join(",");
-                            if (newNodesVal !== u.userNodes) {
-                                u.userNodes = newNodesVal;
-                                hasChanges = true;
-                            }
                         }
-                    });
-
-                    if (hasChanges) {
+                        if (Array.isArray(sysConfig.users)) {
+                            sysConfig.users.forEach(u => {
+                                if (Array.isArray(u.userNodes)) {
+                                    u.userNodes = u.userNodes.filter(n => !n.includes(nodeHost || targetId));
+                                }
+                            });
+                        }
                         await d1Put(env, "sys_config", JSON.stringify(sysConfig));
                     }
+                    return jsonResponse({ success: true, purged: nodeHost || targetId });
+                } catch(err) {
+                    return jsonResponse({ success: false, error: err.message }, 500);
                 }
-
-                return jsonResponse({ success: true, purgedNode: nodeHost });
             }
-        }
 
-        // تبادل دوطرفه نود با ورکر اصلی
-        if (reqPath === `${routeBase}/api/node/sync` || reqPath === "/api/node/sync" || reqPath.endsWith("/api/node/sync")) {
+        }
+if (reqPath === `${routeBase}/api/node/sync` || reqPath === "/api/node/sync" || reqPath.endsWith("/api/node/sync")) {
             try {
                 const nodeKey = request.headers.get("X-Node-Key");
                 const b = await request.json();

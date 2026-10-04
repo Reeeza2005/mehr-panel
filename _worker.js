@@ -1,4 +1,53 @@
 
+async function getWorkerCFUsageDirect(env, workerName) {
+  let accountId = env.CF_ACCOUNT_ID;
+  let apiToken = env.CF_API_TOKEN;
+
+  if (!accountId || !apiToken) {
+    try {
+      const stored = await env.IOT_DB.prepare("SELECT value FROM kv_store WHERE key = 'sys_config'").first();
+      if (stored && stored.value) {
+        const parsed = JSON.parse(stored.value);
+        if (!accountId && parsed.cfAccountId) accountId = parsed.cfAccountId;
+        if (!apiToken && parsed.cfApiToken) apiToken = parsed.cfApiToken;
+      }
+    } catch(e) {}
+  }
+
+  if (!accountId) accountId = "aa639a109164fcb56c915326b7b269ad";
+  if (!accountId || !apiToken) return null;
+
+  try {
+    const currentDate = new Date().toISOString().split("T")[0] + "T00:00:00Z";
+    const query = `query GetDailyUsage($accountId: String!, $start: ISO8601DateTime!, $scriptName: String!) {
+      viewer {
+        accounts(filter: {accountTag: $accountId}) {
+          workersInvocationsAdaptive(limit: 100, filter: { datetime_geq: $start, scriptName: $scriptName }) {
+            sum { requests }
+          }
+        }
+      }
+    }`;
+    const res = await fetch("https://api.cloudflare.com/client/v4/graphql", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiToken}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ query, variables: { accountId, start: currentDate, scriptName: workerName } })
+    });
+    if (!res.ok) return null;
+    const j = await res.json();
+    const records = j?.data?.viewer?.accounts?.[0]?.workersInvocationsAdaptive || [];
+    let total = 0;
+    records.forEach(r => { total += (r?.sum?.requests || 0); });
+    return total;
+  } catch(e) {
+    return null;
+  }
+}
+
+
 async function cachedD1Get(env, key) {
     try {
         const row = await env.IOT_DB.prepare("SELECT value FROM kv_store WHERE key = ?").bind(key).first();
@@ -1241,6 +1290,23 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
         }
 
         // مدیریت نودها در دیتابیس رابطه‌ای D1
+        
+        if (reqPath.endsWith("/api/debug-pull-node4")) {
+          try {
+            const res = await fetch("https://nod-4.v5twycq1o.workers.dev/api/stats", {
+              signal: AbortSignal.timeout(6000)
+            });
+            const text = await res.text();
+            return new Response(JSON.stringify({ ok: res.ok, status: res.status, body: text }), {
+              headers: { "Content-Type": "application/json" }
+            });
+          } catch(e) {
+            return new Response(JSON.stringify({ ok: false, error: e.message, stack: e.stack }), {
+              headers: { "Content-Type": "application/json" }
+            });
+          }
+        }
+
         if (reqPath.endsWith("/api/nodes/force-refresh-all") && request.method === "POST") {
         try {
           const { results: nodes } = await env.IOT_DB.prepare("SELECT id, url, api_key FROM nodes WHERE status != 'deleted'").all();
@@ -1256,9 +1322,24 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
                 signal: AbortSignal.timeout(6000)
               }).catch(() => null);
 
+              let reqs = 0;
+              let fetched = false;
+
               if (statRes && statRes.ok) {
                 const sJson = await statRes.json().catch(() => null);
-                const reqs = parseInt(sJson?.daily_requests ?? sJson?.requests ?? 0) || 0;
+                reqs = parseInt(sJson?.daily_requests ?? sJson?.requests ?? 0) || 0;
+                fetched = true;
+              } else {
+                // اگر خطای 1042 داد، مستقیماً از کلادفلر بخوان
+                const scriptName = n.name || n.id;
+                const directReqs = await getWorkerCFUsageDirect(env, scriptName);
+                if (directReqs !== null) {
+                  reqs = directReqs;
+                  fetched = true;
+                }
+              }
+
+              if (fetched) {
                 await env.IOT_DB.prepare(
                   "UPDATE nodes SET daily_requests = ?, last_reset_date = ?, last_seen = ?, status = 'active' WHERE id = ?"
                 ).bind(reqs, todayStr, nowTs, n.id).run();

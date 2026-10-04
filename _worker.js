@@ -1244,15 +1244,32 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
         if (reqPath.endsWith("/api/nodes/force-refresh-all") && request.method === "POST") {
         try {
           const { results: nodes } = await env.IOT_DB.prepare("SELECT id, url, api_key FROM nodes WHERE status != 'deleted'").all();
+          const nowTs = Math.floor(Date.now() / 1000);
+          const todayStr = new Date().toISOString().split("T")[0];
           const tasks = (nodes || []).map(async (n) => {
             if (!n.url) return;
             try {
-              const syncUrl = `${n.url.replace(/\/+$/, "")}/api/node/force-sync`;
-              await fetch(syncUrl, {
+              const base = n.url.replace(/\/+$/, "");
+              // ابتدا خواندن مستقیم آمار نود (Pull Model)
+              const statRes = await fetch(`${base}/api/stats`, {
+                headers: { "X-Node-Key": n.api_key || "" },
+                signal: AbortSignal.timeout(6000)
+              }).catch(() => null);
+
+              if (statRes && statRes.ok) {
+                const sJson = await statRes.json().catch(() => null);
+                const reqs = parseInt(sJson?.daily_requests ?? sJson?.requests ?? 0) || 0;
+                await env.IOT_DB.prepare(
+                  "UPDATE nodes SET daily_requests = ?, last_reset_date = ?, last_seen = ?, status = 'active' WHERE id = ?"
+                ).bind(reqs, todayStr, nowTs, n.id).run();
+              }
+
+              // تریگر همگام‌سازی نودهای متفرقه
+              await fetch(`${base}/api/node/force-sync`, {
                 method: "POST",
                 headers: { "X-Node-Key": n.api_key || "" },
-                signal: AbortSignal.timeout(4000)
-              });
+                signal: AbortSignal.timeout(3000)
+              }).catch(() => null);
             } catch(e) {}
           });
           await Promise.allSettled(tasks);

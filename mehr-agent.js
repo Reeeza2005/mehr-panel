@@ -464,10 +464,19 @@ export default {
     }
 
     if (path === "/api/status" || path === "/api/stats") {
+      let cfDaily = 0;
+      try {
+        if (typeof getEdgeNodeCFUsage === "function") {
+          const val = await getEdgeNodeCFUsage(env);
+          if (val !== null && val >= 0) cfDaily = val;
+        }
+      } catch(e) {}
       return new Response(JSON.stringify({
         status: "active",
         role: "edge_node",
-        node_id: env.NODE_ID || url.hostname.split(".")[0] || "edge-node"
+        node_id: env.NODE_ID || url.hostname.split(".")[0] || "edge-node",
+        daily_requests: cfDaily,
+        requests: cfDaily
       }), {
         status: 200,
         headers: { "Content-Type": "application/json" }

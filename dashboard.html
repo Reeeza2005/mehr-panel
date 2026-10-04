@@ -940,7 +940,7 @@ html.dark select option {
                         <p id="tab-cluster-capacity-badge" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5" data-i18n="t4_cluster_loading">در حال بارگذاری وضعیت کلاستر...</p>
                     </div>
                     <div class="flex items-center gap-2">
-                        <button onclick="window.triggerRefreshNodesAndStats(this)" class="px-3 py-2 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800/90 dark:hover:bg-slate-700 text-slate-800 dark:text-white border border-slate-300 dark:border-slate-600 transition flex items-center gap-1.5 shadow-sm">
+                        <button onclick="if(typeof autoCheckNodesHealth==='function'){autoCheckNodesHealth();showToast('در حال پایش و به‌روزرسانی وضعیت نودها...','info');}else if(typeof renderTabNodes==='function'){renderTabNodes();}" class="px-3 py-2 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800/90 dark:hover:bg-slate-700 text-slate-800 dark:text-white border border-slate-300 dark:border-slate-600 transition flex items-center gap-1.5 shadow-sm">
                             <span data-i18n="t4_btn_refresh">🔄 به‌روزرسانی وضعیت</span>
                         </button>
                         <button onclick="showAddNodeModal()" type="button" class="px-4 py-2 text-xs font-bold rounded-xl bg-primary text-white hover:opacity-90 transition flex items-center gap-1.5 shadow-sm shadow-primary/20">
@@ -3363,14 +3363,7 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                       }).catch(() => null);
                       clearTimeout(t);
                       if (res && res.ok) {
-                          let sData = {};
-                          try { sData = await res.json(); } catch(_) {}
-                          window.clusterNodeStats.nodes[p.url] = { 
-                              online: true, 
-                              latency: Date.now() - st, 
-                              totalBytes: Number(sData.bytes || 0),
-                              reqs: Number(sData.reqs || 0)
-                          };
+                          window.clusterNodeStats.nodes[p.url] = { online: true, latency: Date.now() - st, totalBytes: 0 };
                       } else {
                           window.clusterNodeStats.nodes[p.url] = { online: false, latency: 0, totalBytes: 0 };
                       }
@@ -3406,7 +3399,7 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                               ${statusBadge}
                           </div>
                           <div class="flex items-center gap-3 text-[11px] text-slate-400 dark:text-slate-500 font-mono">
-                              <span>مصرف: <strong class="text-slate-600 dark:text-slate-300">${info.totalBytes > 0 && info.totalBytes < 1073741824 ? (info.totalBytes / (1024 * 1024)).toFixed(1) + " MB" : (info.totalBytes / (1024 * 1024 * 1024)).toFixed(2) + " GB"}</strong></span><span>ریکوئست: <strong class="text-indigo-500">${info.reqs || 0} r</strong></span>
+                              <span>مصرف عبوری: <strong class="text-slate-600 dark:text-slate-300">${trafficGb} GB</strong></span>
                               <span>کلید: ${p.apiKey.substring(0, 10)}...</span>
                           </div>
                       </div>
@@ -5509,70 +5502,7 @@ function buildModeCheckboxes(wrapId, userMode) {
         window.renderTabNodes();
     };
 
-    window.triggerRefreshNodesAndStats = async function(btnEl) {
-         if (btnEl) {
-             btnEl.disabled = true;
-             btnEl.classList.add("opacity-50", "animate-pulse");
-         }
-         if (typeof showToast === "function") showToast("در حال استعلام آمار زنده از کلادفلر...", "info");
-         try {
-             // ۱. استعلام زنده و همگام‌سازی دیتابیس با کلادفلر
-             await fetch("/api/nodes/force-refresh-all", { method: "POST" }).catch(() => {});
-             // ۲. دریافت لیست کامل و بروز نودها از دیتابیس
-             const res = await fetch("/api/nodes");
-             if (res.ok) {
-                 const data = await res.json();
-                 if (data.success && Array.isArray(data.nodes)) {
-                     window.clusterNodeStats = window.clusterNodeStats || { nodes: {} };
-                     window.clusterNodeStats.nodes = window.clusterNodeStats.nodes || {};
-                     if (window.nahanConfig) {
-                         window.nahanConfig.linkedPanels = window.nahanConfig.linkedPanels || [];
-                     }
-                     data.nodes.forEach(n => {
-                         const h = (n.url || n.address || "").replace(/^https?:\/\//, "").split("/")[0].trim().toLowerCase();
-                         if (!h) return;
-                         window.clusterNodeStats.nodes[h] = {
-                             ...(window.clusterNodeStats.nodes[h] || {}),
-                             total_bytes: Number(n.total_bytes || 0),
-                             today_bytes: Number(n.today_bytes || 0),
-                             daily_requests: Number(n.daily_requests || 0),
-                             country: n.country || "US",
-                             flag: n.flag || "",
-                             is_online: n.is_online === true,
-                             online: n.is_online === true
-                         };
-                         // اطمینان از حضور نود در آرایه کارت‌های داشبورد
-                         if (window.nahanConfig && Array.isArray(window.nahanConfig.linkedPanels)) {
-                             const exists = window.nahanConfig.linkedPanels.find(p => {
-                                 const ph = ((typeof p === "object" ? p.url : p) || "").replace(/^https?:\/\//, "").split("/")[0].trim().toLowerCase();
-                                 return ph === h;
-                             });
-                             if (!exists) {
-                                 window.nahanConfig.linkedPanels.push({
-                                     id: n.id || h,
-                                     name: n.name || h,
-                                     url: n.url || ("https://" + h),
-                                     apiKey: n.api_key || ""
-                                 });
-                             }
-                         }
-                     });
-                 }
-             }
-             if (typeof autoCheckNodesHealth === "function") await autoCheckNodesHealth();
-             if (typeof renderTabNodes === "function") renderTabNodes();
-             if (typeof showToast === "function") showToast("آمار و وضعیت نودها با موفقیت به‌روزرسانی شد.", "success");
-         } catch(e) {
-             if (typeof renderTabNodes === "function") renderTabNodes();
-         } finally {
-             if (btnEl) {
-                 btnEl.disabled = false;
-                 btnEl.classList.remove("opacity-50", "animate-pulse");
-             }
-         }
-     };
-
-     window.syncNodesTrafficStats = async function() {
+    window.syncNodesTrafficStats = async function() {
         try {
             const apiBase = (window.nahanConfig?.apiRoute || "sync").replace(/^\/+|\/+$/g, "");
             const sRes = await fetch("/" + apiBase + "/api/stats");
@@ -5599,7 +5529,7 @@ function buildModeCheckboxes(wrapId, userMode) {
                         window.clusterNodeStats.nodes[h] = {
                             ...(window.clusterNodeStats.nodes[h] || {}),
                             total_bytes: Number(n.total_bytes || 0),
-                            today_bytes: Number(n.today_bytes || 0),
+                            today_bytes: Number(n.total_bytes || 0),
                             daily_requests: Number(n.daily_requests || 0),
                             country: n.country || "US",
                             flag: n.flag || "",
@@ -5686,7 +5616,7 @@ function buildModeCheckboxes(wrapId, userMode) {
             const latency = st.latency ? (st.latency + (typeof st.latency === 'number' ? " ms" : "")) : "--";
             const country = st.country || stats[lowHost]?.country || "";
             const flagEmoji = st.flag || getCountryFlagEmoji(country);
-            const dailyReqs = Number(st.daily_requests ?? stats[lowHost]?.daily_requests ?? window.clusterNodeStats?.nodes?.[lowHost]?.daily_requests ?? 0);
+            const dailyReqs = st.daily_requests ?? stats[lowHost]?.daily_requests ?? 0;
 
             let nodeUsers = 0, nodeTotalBytes = 0, nodeTodayBytes = 0;
 			users.forEach(u => {

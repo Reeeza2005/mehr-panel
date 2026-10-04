@@ -1,67 +1,3 @@
-
-async function getWorkerCFUsageDirect(env, workerName) {
-  let accountId = env.CF_ACCOUNT_ID;
-  let apiToken = env.CF_API_TOKEN;
-
-  if (!accountId || !apiToken) {
-    try {
-      const stored = await env.IOT_DB.prepare("SELECT value FROM kv_store WHERE key = 'sys_config'").first();
-      if (stored && stored.value) {
-        const parsed = JSON.parse(stored.value);
-        if (!accountId && parsed.cfAccountId) accountId = parsed.cfAccountId;
-        if (!apiToken && parsed.cfApiToken) apiToken = parsed.cfApiToken;
-      }
-    } catch(e) {}
-  }
-
-  if (!accountId) accountId = "aa639a109164fcb56c915326b7b269ad";
-  if (!accountId || !apiToken) return null;
-
-  try {
-    const currentDate = new Date().toISOString().split("T")[0] + "T00:00:00Z";
-    const query = `query GetDailyUsage($accountId: String!, $start: ISO8601DateTime!, $scriptName: String!) {
-      viewer {
-        accounts(filter: {accountTag: $accountId}) {
-          workersInvocationsAdaptive(limit: 100, filter: { datetime_geq: $start, scriptName: $scriptName }) {
-            sum { requests }
-          }
-        }
-      }
-    }`;
-    const res = await fetch("https://api.cloudflare.com/client/v4/graphql", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${apiToken}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ query, variables: { accountId, start: currentDate, scriptName: workerName } })
-    });
-    if (!res.ok) return null;
-    const j = await res.json();
-    const records = j?.data?.viewer?.accounts?.[0]?.workersInvocationsAdaptive || [];
-    let total = 0;
-    records.forEach(r => { total += (r?.sum?.requests || 0); });
-    return total;
-  } catch(e) {
-    return null;
-  }
-}
-
-
-async function cachedD1Get(env, key) {
-    try {
-        const row = await env.IOT_DB.prepare("SELECT value FROM kv_store WHERE key = ?").bind(key).first();
-        return row ? row.value : null;
-    } catch(e) { return null; }
-}
-
-async function cachedD1Put(env, key, value) {
-    try {
-        await env.IOT_DB.prepare("INSERT INTO kv_store (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(key, typeof value === "string" ? value : JSON.stringify(value)).run();
-    } catch(e) {}
-}
-
-let sysUsageCache = { users: {} };
 function safeBtoa(str) {
     try {
         const bytes = new TextEncoder().encode(str);
@@ -462,45 +398,6 @@ export default {
                   }), { status: 200, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } });
               } catch (e) {
                   return new Response(JSON.stringify({ ok: true, latency: 120, ws_ok: true, blocked: false }), {
-                      status: 200,
-                      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
-                  });
-              }
-          }
-
-                  if (reqPath === "/api/status") {
-              try {
-                  let totalBytes = 0;
-                  let totalReqs = 0;
-                  try {
-                      const raw = await d1Get(env, "sys_usage");
-                      if (raw) {
-                          const parsed = JSON.parse(raw);
-                          const uMap = parsed.users || parsed || {};
-                          for (const k in uMap) {
-                              if (uMap[k]) {
-                                  totalBytes += Number(uMap[k].bytes || 0);
-                                  totalReqs += Number(uMap[k].reqs || 0);
-                              }
-                          }
-                      }
-                  } catch(_) {}
-                  return new Response(JSON.stringify({
-                      ok: true,
-                      online: true,
-                      bytes: totalBytes,
-                      reqs: totalReqs,
-                      timestamp: Date.now()
-                  }), {
-                      status: 200,
-                      headers: {
-                          "Content-Type": "application/json",
-                          "Access-Control-Allow-Origin": "*",
-                          "Access-Control-Allow-Headers": "*"
-                      }
-                  });
-              } catch(e) {
-                  return new Response(JSON.stringify({ ok: true, bytes: 0, reqs: 0 }), {
                       status: 200,
                       headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
                   });
@@ -1290,157 +1187,23 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
         }
 
         // مدیریت نودها در دیتابیس رابطه‌ای D1
-        
-        if (reqPath.endsWith("/api/debug-pull-node4")) {
-          try {
-            const res = await fetch("https://nod-4.v5twycq1o.workers.dev/api/stats", {
-              signal: AbortSignal.timeout(6000)
-            });
-            const text = await res.text();
-            return new Response(JSON.stringify({ ok: res.ok, status: res.status, body: text }), {
-              headers: { "Content-Type": "application/json" }
-            });
-          } catch(e) {
-            return new Response(JSON.stringify({ ok: false, error: e.message, stack: e.stack }), {
-              headers: { "Content-Type": "application/json" }
-            });
-          }
-        }
-
-        if (reqPath.endsWith("/api/nodes/force-refresh-all") && request.method === "POST") {
-        try {
-          const { results: nodes } = await env.IOT_DB.prepare("SELECT id, name, url, api_key FROM nodes WHERE status != 'deleted'").all();
-          const nowTs = Math.floor(Date.now() / 1000);
-          const todayStr = new Date().toISOString().split("T")[0];
-          const tasks = (nodes || []).map(async (n) => {
-            if (!n.url && !n.id) return;
-            try {
-              const base = (n.url || "").replace(/\/+$/, "");
-              let reqs = 0;
-              let fetched = false;
-
-              // اگر آدرس وجود دارد، تلاش اول با HTTP با تایم‌اوت کوتاه ۳ ثانیه‌ای
-              if (base) {
-                const statRes = await fetch(`${base}/api/stats`, {
-                  headers: { "X-Node-Key": n.api_key || "" },
-                  signal: AbortSignal.timeout(3000)
-                }).catch(() => null);
-
-                if (statRes && statRes.ok) {
-                  const sJson = await statRes.json().catch(() => null);
-                  reqs = parseInt(sJson?.daily_requests ?? sJson?.requests ?? 0) || 0;
-                  fetched = true;
-                }
-              }
-
-              // اگر HTTP ناموفق بود (مانند خطای 1042 ساب‌دامین مشترک)، مستقیماً از کلادفلر بخوان
-              if (!fetched) {
-                const scriptName = n.name || n.id;
-                const directReqs = await getWorkerCFUsageDirect(env, scriptName);
-                if (directReqs !== null) {
-                  reqs = directReqs;
-                  fetched = true;
-                }
-              }
-
-              if (fetched) {
-                await env.IOT_DB.prepare(
-                  "UPDATE nodes SET daily_requests = ?, last_reset_date = ?, last_seen = ?, status = 'active' WHERE id = ?"
-                ).bind(reqs, todayStr, nowTs, n.id).run();
-              }
-            } catch(e) {}
-          });
-          await Promise.allSettled(tasks);
-          return new Response(JSON.stringify({ success: true, message: "Triggered refresh on all nodes" }), {
-            headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
-          });
-        } catch (err) {
-          return new Response(JSON.stringify({ success: false, error: err.message }), {
-            status: 500,
-            headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
-          });
-        }
-      }
-
-      if (reqPath === `${routeBase}/api/nodes` || reqPath.endsWith("/api/nodes")) {
+        if (reqPath === `${routeBase}/api/nodes` || reqPath.endsWith("/api/nodes")) {
             if (request.method === "GET") {
                 const { results } = await env.IOT_DB.prepare(`
                     SELECT n.*, 
-                           COALESCE(SUM(nt.bytes_uploaded + nt.bytes_downloaded), 0) AS total_bytes,
-                           COALESCE(SUM(CASE WHEN nt.last_update >= unixepoch('start of day') THEN (nt.bytes_uploaded + nt.bytes_downloaded) ELSE 0 END), 0) AS today_bytes
+                           COALESCE(SUM(nt.bytes_uploaded + nt.bytes_downloaded), 0) AS total_bytes
                     FROM nodes n
-                    LEFT JOIN node_traffic nt ON (nt.node_id = n.id OR nt.node_id LIKE '%' || n.id || '%' OR n.url LIKE '%' || nt.node_id || '%')
+                    LEFT JOIN node_traffic nt ON (nt.node_id = n.id OR nt.node_id LIKE '%' || n.id || '%')
                     GROUP BY n.id
                     ORDER BY n.created_at DESC
                 `).all();
-                let cfStats = null;
-                if (sysConfig.cfAccountId && sysConfig.cfApiToken) {
-                    try {
-                        cfStats = await fetchCloudflareUsage(sysConfig.cfAccountId, sysConfig.cfApiToken);
-                    } catch(e) {}
-                }
-
-                  const nowTs = Math.floor(Date.now() / 1000);
-                  const todayStr = new Date().toISOString().split('T')[0];
-                  const computedNodes = await Promise.all((results || []).map(async (n) => {
-                      let dReqs = Number(n.daily_requests || 0);
-                      let lastSeen = Number(n.last_seen || 0);
-                      const isStale = (!dReqs || dReqs === 0 || n.last_reset_date !== todayStr || (nowTs - lastSeen) > 900);
-                      if (isStale && (n.name || n.id) && typeof getWorkerCFUsageDirect === 'function') {
-                          try {
-                              const liveReqs = await getWorkerCFUsageDirect(env, n.name || n.id);
-                              if (liveReqs !== null) {
-                                  dReqs = liveReqs;
-                                  lastSeen = nowTs;
-                                  n.daily_requests = liveReqs;
-                                  n.last_seen = nowTs;
-                                  n.last_reset_date = todayStr;
-                                  env.IOT_DB.prepare('UPDATE nodes SET daily_requests = ?, last_reset_date = ?, last_seen = ?, status = \'active\' WHERE id = ?')
-                                      .bind(liveReqs, todayStr, nowTs, n.id).run().catch(() => {});
-                              }
-                          } catch(e) {}
-                      }
-                      const isOnline = n.status === 'active' && (lastSeen > 0 ? (nowTs - lastSeen) < 86400 : true);
-                      return {
-                          ...n,
-                          daily_requests: dReqs,
-                          address: n.address || n.url,
-                          total_bytes: Number(n.total_bytes || 0),
-                          is_online: isOnline,
-                          country: (n.country && n.country.length === 2 ? (n.country.toUpperCase()) : 'US'),
-                          flag: getCountryFlag(n.country || 'US')
-                      };
-                  }));
-                // ادغام نودهای linkedPanels که هنوز در جدول nodes نیستند
-                const existingHosts = new Set(computedNodes.map(n => 
-                    String(n.address || n.url || n.id || "").replace(/^https?:\/\//, "").split("/")[0].trim().toLowerCase()
-                ));
-
-                const panels = Array.isArray(sysConfig.linkedPanels) ? sysConfig.linkedPanels : [];
-                panels.forEach((p, idx) => {
-                    const rawUrl = (typeof p === "object" ? p.url : p) || "";
-                    const host = rawUrl.replace(/^https?:\/\//, "").split("/")[0].trim().toLowerCase();
-                    if (host && !existingHosts.has(host)) {
-                        computedNodes.push({
-                            id: "panel_" + idx,
-                            name: (typeof p === "object" ? p.name : host) || host,
-                            address: rawUrl,
-                            url: rawUrl,
-                            daily_requests: 0,
-                            total_bytes: 0,
-                            is_online: true,
-                            country: "US",
-                            flag: getCountryFlag("US")
-                        });
-                        existingHosts.add(host);
-                    }
-                });
-
-                return jsonResponse({ 
-                    success: true, 
-                    nodes: computedNodes,
-                    masterDailyReqs: (cfStats && cfStats.totalRequests !== undefined) ? cfStats.totalRequests : 0
-                });
+                const computedNodes = (results || []).map(n => ({
+                    ...n,
+                    address: n.address || n.url,
+                    total_bytes: Number(n.total_bytes || 0),
+                    is_online: n.last_seen > 0 && (Math.floor(Date.now() / 1000) - n.last_seen) < 300 && n.status === "active", country: (n.country && n.country.length === 2 ? (n.country.toUpperCase()) : "US"), flag: getCountryFlag(n.country || "US")
+                }));
+                return jsonResponse({ success: true, nodes: computedNodes });
             }
                         if (request.method === "PUT") {
                 try {
@@ -1551,7 +1314,7 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
                 const nodeName = b.node_name || b.name || nodeId;
                 const nodeUrl = b.node_url || b.address || "";
                 const nodeCountry = b.country || "";
-                const reqDelta = parseInt(b.daily_requests ?? b.requests ?? b.requests_count ?? b.requests_delta ?? 0) || 0;
+                const reqDelta = parseInt(b.requests_delta || b.requests || 0) || 0;
 
                 await env.IOT_DB.prepare(`
                     INSERT INTO nodes (id, name, url, api_key, created_at, status, country, daily_requests, last_reset_date, last_seen)
@@ -1560,16 +1323,11 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
                         last_seen = excluded.last_seen,
                         status = "active",
                         country = CASE WHEN excluded.country != "" THEN excluded.country ELSE nodes.country END,
-                        daily_requests = excluded.daily_requests,
+                        daily_requests = CASE WHEN (nodes.last_reset_date IS NULL OR nodes.last_reset_date = excluded.last_reset_date) THEN COALESCE(nodes.daily_requests, 0) + excluded.daily_requests ELSE excluded.daily_requests END,
                         last_reset_date = excluded.last_reset_date
                 `).bind(nodeId, nodeName, nodeUrl, nodeKey, now, nodeCountry, reqDelta, todayStr, now).run();
 
                 if (b.user_traffic && Array.isArray(b.user_traffic)) {
-                let sysUsageCache = null;
-                try {
-                    const existingCache = await cachedD1Get(env, "sys_usage");
-                    if (existingCache) sysUsageCache = JSON.parse(existingCache);
-                } catch(e) {}
             // ۱. بارگذاری کش مصرف سیستمی جهت نمایش زنده در داشبورد
             if (!sysUsageCache) sysUsageCache = { users: {} };
             if (!sysUsageCache.users) sysUsageCache.users = {};
@@ -1624,11 +1382,7 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
                     uStat.dReqs = (uStat.dReqs || 0) + deltaReqs;
                 }
             }
-            try {
-                await env.IOT_DB.prepare(
-                    "INSERT INTO kv_store (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
-                ).bind("sys_usage", JSON.stringify(sysUsageCache)).run();
-            } catch(e) {}
+            await cachedD1Put(env, "sys_usage", JSON.stringify(sysUsageCache));
         }
 
         const { results: blocked } = await env.IOT_DB.prepare(

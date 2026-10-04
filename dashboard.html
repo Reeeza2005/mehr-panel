@@ -5734,6 +5734,58 @@ function buildModeCheckboxes(wrapId, userMode) {
         setTimeout(window.initServersTab, 300);
     }
 })();
+
+    // تابع استعلام زنده آمار و نودها بدون نیاز به رفرش صفحه
+    window.triggerRefreshNodesAndStats = async function(btnEl) {
+        if (btnEl) {
+            btnEl.disabled = true;
+            btnEl.classList.add("opacity-50", "animate-pulse");
+        }
+        if (typeof showToast === "function") showToast("در حال دریافت آمار زنده از کلادفلر و دیتابیس...", "info");
+        try {
+            await fetch("/api/nodes/force-refresh-all", { method: "POST" }).catch(() => {});
+            const res = await fetch("/api/nodes");
+            if (res.ok) {
+                const data = await res.json();
+                if (data.success && Array.isArray(data.nodes)) {
+                    window.clusterNodeStats = window.clusterNodeStats || { nodes: {} };
+                    window.clusterNodeStats.nodes = window.clusterNodeStats.nodes || {};
+                    const cfg = (typeof getActivePanelConfig === "function") ? getActivePanelConfig() : (window.nahanConfig || {});
+                    cfg.linkedPanels = cfg.linkedPanels || [];
+                    data.nodes.forEach(n => {
+                        const h = (n.url || n.address || "").replace(/^https?:\/\//, "").split("/")[0].trim().toLowerCase();
+                        if (!h) return;
+                        window.clusterNodeStats.nodes[h] = {
+                            ...(window.clusterNodeStats.nodes[h] || {}),
+                            total_bytes: Number(n.total_bytes || 0),
+                            today_bytes: Number(n.today_bytes || 0),
+                            daily_requests: Number(n.daily_requests || 0),
+                            country: n.country || "US",
+                            flag: n.flag || "",
+                            is_online: n.is_online === true,
+                            online: n.is_online === true
+                        };
+                        const exists = cfg.linkedPanels.some(p => ((typeof p === "object" ? p.url : p) || "").toLowerCase().includes(h));
+                        if (!exists) {
+                            cfg.linkedPanels.push({ id: n.id || h, name: n.name || h, url: n.url || ("https://" + h), apiKey: n.api_key || "" });
+                        }
+                    });
+                }
+            }
+            if (typeof syncNodesTrafficStats === "function") await syncNodesTrafficStats();
+            if (typeof autoCheckNodesHealth === "function") await autoCheckNodesHealth();
+            if (typeof renderTabNodes === "function") renderTabNodes();
+            if (typeof showToast === "function") showToast("آمار و وضعیت نودها با موفقیت به‌روزرسانی شد.", "success");
+        } catch(e) {
+            if (typeof renderTabNodes === "function") renderTabNodes();
+        } finally {
+            if (btnEl) {
+                btnEl.disabled = false;
+                btnEl.classList.remove("opacity-50", "animate-pulse");
+            }
+        }
+    };
+
 </script>
 </body>
 </html>

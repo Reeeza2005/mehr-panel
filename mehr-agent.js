@@ -1,3 +1,4 @@
+let activeUpstreamTarget = null;
 async function getEdgeNodeCFUsage(env) {
   const accountId = env.CF_ACCOUNT_ID;
   const apiToken = env.CF_API_TOKEN;
@@ -135,6 +136,24 @@ async function syncWithMaster(env, request, force = false) {
       lastSyncTime = now;
 
       const data = await res.json().catch(() => null);
+        if (data && data.upstream_uri) {
+          try {
+            const rawUri = data.upstream_uri.trim();
+            if (rawUri.startsWith("vless://")) {
+              const uPart = rawUri.slice(8);
+              const atIdx = uPart.indexOf("@");
+              const qIdx = uPart.indexOf("?");
+              const hPart = uPart.slice(atIdx + 1, qIdx !== -1 ? qIdx : undefined);
+              const cIdx = hPart.lastIndexOf(":");
+              activeUpstreamTarget = {
+                host: cIdx !== -1 ? hPart.slice(0, cIdx) : hPart,
+                port: cIdx !== -1 ? parseInt(hPart.slice(cIdx + 1)) : 443
+              };
+            }
+          } catch(e) { activeUpstreamTarget = null; }
+        } else if (data && !data.upstream_uri) {
+          activeUpstreamTarget = null;
+        }
       if (data) {
         if (Array.isArray(data.allowed_uuids)) {
           cachedAllowedUsers = new Set(data.allowed_uuids.map(x => String(x).toLowerCase()));
@@ -268,7 +287,19 @@ async function establishSocketWithProxy(socketHolder, targetHost, targetPort, ra
   const proxyIP = env?.PROXY_IP || DEFAULT_PROXY_IP;
 
   try {
-    sock = connect({ hostname: targetHost, port: targetPort });
+    
+    let isUpstreamReq = false;
+    try {
+      const reqUrl = new URL(request?.url || "https://node.internal");
+      if (reqUrl.searchParams.get("upstream") === "true" || reqUrl.pathname.includes("upstream=true")) {
+        isUpstreamReq = true;
+      }
+    } catch(e) {}
+    const useUpstreamHere = isUpstreamReq || (activeUpstreamTarget !== null);
+
+    const destHost = (useUpstreamHere && activeUpstreamTarget) ? activeUpstreamTarget.host : targetHost;
+    const destPort = (useUpstreamHere && activeUpstreamTarget) ? activeUpstreamTarget.port : targetPort;
+    sock = connect({ hostname: destHost, port: destPort });
     socketHolder.value = sock;
 
     if (rawPayload && rawPayload.byteLength > 0) {

@@ -290,6 +290,7 @@ import HTML_CONTENT from "./dashboard.html";
 const CURRENT_VERSION = "3.5.5";
 
 const SYSTEM_DEFAULTS = {
+    upstreamUri: "",
     githubRepo: 'Reeeza2005/mehr-panel',
     name: "مِهر",
     apiRoute: "sync",
@@ -461,22 +462,46 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
     if (env.IOT_DB) {
         try {
             const { results } = await env.IOT_DB.prepare("SELECT * FROM nodes WHERE status = 'active' AND (address IS NOT NULL OR url IS NOT NULL)").all();
-            nodesList = (results || []).map(n => ({
-                ...n,
-                host: (n.address || n.url || "").replace(/^https?:\/\//, "").split("/")[0].trim(),
-                path: "vl"
-            }));
+            nodesList = (results || []).map(n => {
+                 const h = (n.address || n.url || "").replace(/^https?:\/\//, "").split("/")[0].trim();
+                 let isUp = false;
+                 if (Array.isArray(sysConfig.linkedPanels)) {
+                     const found = sysConfig.linkedPanels.find(p => {
+                         const ph = (typeof p === "object" ? (p.url || p.host || "") : p).replace(/^[a-zA-Z]+:\/\//, "").split("/")[0].split(":")[0].trim().toLowerCase();
+                         return ph === h.toLowerCase();
+                     });
+                     if (found && typeof found === "object") isUp = Boolean(found.useUpstream || found.use_upstream);
+                 }
+                 return {
+                     ...n,
+                     host: h,
+                     path: "vl",
+                     useUpstream: isUp || Boolean(n.useUpstream || n.use_upstream)
+                 };
+             });
             if (nodesList.length > 0) nodeTargets = nodesList;
         } catch(e) {}
     }
     if (env.IOT_DB) {
         try {
             const { results } = await env.IOT_DB.prepare("SELECT * FROM nodes WHERE status = 'active' AND (address IS NOT NULL OR url IS NOT NULL)").all();
-            nodesList = (results || []).map(n => ({
-                ...n,
-                host: (n.address || n.url || "").replace(/^https?:\/\//, "").split("/")[0].trim(),
-                path: "vl"
-            }));
+            nodesList = (results || []).map(n => {
+                 const h = (n.address || n.url || "").replace(/^https?:\/\//, "").split("/")[0].trim();
+                 let isUp = false;
+                 if (Array.isArray(sysConfig.linkedPanels)) {
+                     const found = sysConfig.linkedPanels.find(p => {
+                         const ph = (typeof p === "object" ? (p.url || p.host || "") : p).replace(/^[a-zA-Z]+:\/\//, "").split("/")[0].split(":")[0].trim().toLowerCase();
+                         return ph === h.toLowerCase();
+                     });
+                     if (found && typeof found === "object") isUp = Boolean(found.useUpstream || found.use_upstream);
+                 }
+                 return {
+                     ...n,
+                     host: h,
+                     path: "vl",
+                     useUpstream: isUp || Boolean(n.useUpstream || n.use_upstream)
+                 };
+             });
             if (nodesList.length > 0) nodeTargets = nodesList;
         } catch(e) {}
     }
@@ -696,9 +721,14 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
                             const nodePips = target.proxyIp ? [target.proxyIp, ...proxyIPList.filter(x => x && x !== target.proxyIp)] : (proxyIPList.length > 0 ? proxyIPList : [""]);
                                 for (const pip of (target.proxyIp ? [target.proxyIp] : proxyIPList)) {
                                 let wsExtra = "";
-                                if (pip) { wsExtra += (wsExtra ? "%26" : "%3F") + "proxyip%3D" + encodeURIComponent(pip); }
-                                if (target.useUpstream) { wsExtra += (wsExtra ? "%26" : "%3F") + "upstream%3Dtrue"; }
-                                const pipQuery = wsExtra;
+                                 const isNodeUpstreamActive = Boolean(target.useUpstream || target.use_upstream);
+                                 if (isNodeUpstreamActive) {
+                                     wsExtra += (wsExtra ? "%26" : "%3F") + "upstream%3Dtrue";
+                                 }
+                                 if (pip) {
+                                     wsExtra += (wsExtra ? "%26" : "%3F") + "proxyip%3D" + encodeURIComponent(pip);
+                                 }
+                                 const pipQuery = wsExtra;
                                 const pipLabel = pip ? "-PIP" : "";
                                 const portLabel = port !== 443 ? ":" + port : "";
                                 const baseTag = target.name + "-" + (ep.name || ep.ip) + portLabel + pipLabel + smartLabelSuffix;
@@ -1437,11 +1467,22 @@ if (reqPath === `${routeBase}/api/node/sync` || reqPath === "/api/node/sync" || 
                     "SELECT uuid FROM users WHERE status != \"active\" OR (traffic_limit > 0 AND used_traffic >= traffic_limit)"
                 ).all();
 
-                return jsonResponse({
-                    success: true,
-                    time: now,
-                    blocked_uuids: (blocked || []).map(u => u.uuid)
-                });
+                let isNodeUpstreamEnabled = false;
+                 if (Array.isArray(sysConfig.linkedPanels)) {
+                     const found = sysConfig.linkedPanels.find(p => {
+                         const ph = (typeof p === "object" ? (p.url || p.host || "") : p).replace(/^[a-zA-Z]+:\/\//, "").split("/")[0].split(":")[0].trim().toLowerCase();
+                         return ph === String(nodeUrl || nodeId).toLowerCase();
+                     });
+                     if (found && typeof found === "object") isNodeUpstreamEnabled = Boolean(found.useUpstream || found.use_upstream);
+                 }
+
+                 return jsonResponse({
+                     success: true,
+                     time: now,
+                     blocked_uuids: (blocked || []).map(u => u.uuid),
+                     upstream_uri: sysConfig.upstreamUri || "",
+                     use_upstream: isNodeUpstreamEnabled
+                 });
             } catch(e) {
                 return jsonResponse({ success: false, error: e.message }, 500);
             }

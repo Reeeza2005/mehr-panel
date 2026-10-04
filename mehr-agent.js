@@ -95,7 +95,7 @@ async function syncWithMaster(env, request, force = false) {
     }
 
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 3000);
+    const timer = setTimeout(() => controller.abort(), 10000);
 
     const res = await fetch(`${panelUrl.replace(/\/+$/, "")}/api/node/sync`, {
       method: "POST",

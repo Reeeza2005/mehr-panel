@@ -1489,50 +1489,90 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
                 ).run();
                 return jsonResponse({ success: true, country: country });
             }
-            if (request.method === "DELETE") {
-                const b = await request.json();
-                
-                // ۱. دریافت آدرس و مشخصات نود پیش از حذف
-                let nodeHost = "";
-                try {
-                    const nRow = await env.IOT_DB.prepare("SELECT address, url FROM nodes WHERE id = ?").bind(b.id).first();
-                    if (nRow) {
-                        const raw = nRow.address || nRow.url || "";
-                        nodeHost = raw.replace(/^https?:\/\//, "").split("/")[0].split(":")[0].trim().toLowerCase();
-                    }
-                } catch(e) {}
-
-                // ۲. حذف از دیتابیس D1
-                await env.IOT_DB.prepare("DELETE FROM nodes WHERE id = ?").bind(b.id).run();
-
-                // ۳. پاکسازی آبشاری نود از لیست تمامی کاربران
-                if (nodeHost && Array.isArray(sysConfig.users)) {
-                    let hasChanges = false;
-                    sysConfig.users.forEach(u => {
-                        if (u.userNodes) {
-                            const rawStr = Array.isArray(u.userNodes) ? u.userNodes.join(",") : String(u.userNodes);
-                            const parts = rawStr.split(",");
-                            const filtered = parts.map(n => n.trim()).filter(n => {
-                                if (!n) return false;
-                                const clean = n.replace(/^https?:\/\//, "").split("/")[0].split(":")[0].trim().toLowerCase();
-                                return clean !== nodeHost && clean !== b.id;
-                            });
-                            
-                            const newNodesVal = Array.isArray(u.userNodes) ? filtered : filtered.join(",");
-                            if (newNodesVal !== u.userNodes) {
-                                u.userNodes = newNodesVal;
-                                hasChanges = true;
-                            }
-                        }
-                    });
-
-                    if (hasChanges) {
-                        await d1Put(env, "sys_config", JSON.stringify(sysConfig));
-                    }
-                }
-
-                return jsonResponse({ success: true, purgedNode: nodeHost });
-            }
+             // اختصاص نود به تمام کاربران موجود در پنل
+             if (request.method === "PUT" || (request.method === "POST" && reqPath.endsWith("/assign-all"))) {
+                 const b = await request.json();
+                 const targetId = (b.id || b.nodeId || "").trim();
+                 let targetHost = (b.host || b.address || b.url || "").replace(/^https?:\/\//, "").split("/")[0].split(":")[0].trim();
+                 if (!targetHost && targetId) {
+                     try {
+                         const nRow = await env.IOT_DB.prepare("SELECT address, url FROM nodes WHERE id = ?").bind(targetId).first();
+                         if (nRow) {
+                             const raw = nRow.address || nRow.url || "";
+                             targetHost = raw.replace(/^https?:\/\//, "").split("/")[0].split(":")[0].trim();
+                         }
+                     } catch(e) {}
+                 }
+                 const assignVal = targetHost || targetId;
+                 if (!assignVal) {
+                     return jsonResponse({ success: false, error: "Node identifier missing" }, 400);
+                 }
+                 let updatedCount = 0;
+                 if (Array.isArray(sysConfig.users)) {
+                     sysConfig.users.forEach(u => {
+                         let current = "";
+                         if (Array.isArray(u.userNodes)) {
+                             current = u.userNodes.join(",");
+                         } else {
+                             current = String(u.userNodes || "");
+                         }
+                         const parts = current.split(",").map(p => p.trim()).filter(Boolean);
+                         if (!parts.includes(assignVal)) {
+                             parts.push(assignVal);
+                             u.userNodes = parts.join(",");
+                             updatedCount++;
+                         }
+                     });
+                     if (updatedCount > 0) {
+                         await d1Put(env, "sys_config", JSON.stringify(sysConfig));
+                     }
+                 }
+                 return jsonResponse({ success: true, updatedUsers: updatedCount, node: assignVal });
+             }
+             if (request.method === "DELETE") {
+                 const b = await request.json();
+                 const targetId = b.id || b.nodeId;
+                 let nodeHost = (b.host || b.url || "").replace(/^https?:\/\//, "").split("/")[0].split(":")[0].trim().toLowerCase();
+                 try {
+                     const nRow = await env.IOT_DB.prepare("SELECT address, url FROM nodes WHERE id = ?").bind(targetId).first();
+                     if (nRow) {
+                         const raw = nRow.address || nRow.url || "";
+                         nodeHost = raw.replace(/^https?:\/\//, "").split("/")[0].split(":")[0].trim().toLowerCase();
+                     }
+                 } catch(e) {}
+                 await env.IOT_DB.prepare("DELETE FROM nodes WHERE id = ? OR address LIKE ?").bind(targetId, `%${targetId}%`).run();
+                 await env.IOT_DB.prepare("DELETE FROM node_traffic WHERE node_id = ? OR node_id LIKE ?").bind(targetId, `%${targetId}%`).run();
+                 if (Array.isArray(sysConfig.linkedPanels)) {
+                     sysConfig.linkedPanels = sysConfig.linkedPanels.filter(p => {
+                         const pu = ((typeof p === "object" ? p.url : p) || "").replace(/^https?:\/\//, "").split("/")[0].split(":")[0].trim().toLowerCase();
+                         const pid = (typeof p === "object" ? p.id : "") || "";
+                         return pu !== nodeHost && pu !== targetId && pid !== targetId;
+                     });
+                 }
+                 if (nodeHost && Array.isArray(sysConfig.users)) {
+                     let hasChanges = false;
+                     sysConfig.users.forEach(u => {
+                         if (u.userNodes) {
+                             const rawStr = Array.isArray(u.userNodes) ? u.userNodes.join(",") : String(u.userNodes);
+                             const parts = rawStr.split(",");
+                             const filtered = parts.map(n => n.trim()).filter(n => {
+                                 if (!n) return false;
+                                 const clean = n.replace(/^https?:\/\//, "").split("/")[0].split(":")[0].trim().toLowerCase();
+                                 return clean !== nodeHost && clean !== targetId;
+                             });
+                             const newNodesVal = Array.isArray(u.userNodes) ? filtered : filtered.join(",");
+                             if (newNodesVal !== u.userNodes) {
+                                 u.userNodes = newNodesVal;
+                                 hasChanges = true;
+                             }
+                         }
+                     });
+                     if (hasChanges) {
+                         await d1Put(env, "sys_config", JSON.stringify(sysConfig));
+                     }
+                 }
+                 return jsonResponse({ success: true, purgedNode: nodeHost || targetId });
+             }
         }
 
         // تبادل دوطرفه نود با ورکر اصلی

@@ -5784,45 +5784,102 @@ function buildModeCheckboxes(wrapId, userMode) {
     };
 
 
+    
+
+
+
     window.assignNodeToAllUsers = async function(nodeHost) {
-        if (!confirm(`آیا مطمئن هستید که می‌خواهید سرور "${nodeHost}" را به همه کاربران اختصاص دهید؟`)) return;
-        try {
-            const res = await fetch("/api/nodes", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "assign_all", node: nodeHost })
-            });
-            const data = await res.json();
-            if (data.success) {
-                if (typeof showToast === "function") showToast(data.message || "با موفقیت به همه اضافه شد", "success");
-            } else {
-                alert("خطا: " + (data.error || "عملیات ناموفق بود"));
+        if (!nodeHost) return;
+        // استخراج هاست خالص مطابق منطق getGlobalNodeList
+        let cleanHost = String(nodeHost).trim()
+            .replace(/^[a-zA-Z]+:\/\//, '')
+            .split('/')[0]
+            .split('@').pop()
+            .split(':')[0]
+            .trim();
+
+        if (!confirm(`آیا مطمئن هستید که می‌خواهید سرور "${cleanHost}" را به همه کاربران اختصاص دهید؟`)) return;
+
+        let cfg = (typeof getActivePanelConfig === "function") ? getActivePanelConfig() : (window.nahanConfig || {});
+        if (!cfg.users || !Array.isArray(cfg.users)) {
+            alert("لیست کاربران در تنظیمات یافت نشد.");
+            return;
+        }
+
+        let updatedCount = 0;
+        cfg.users.forEach(u => {
+            let currentList = (u.userNodes || "").split(/[,\r\n;]+/).map(s => s.trim()).filter(Boolean);
+            if (!currentList.includes(cleanHost)) {
+                currentList.push(cleanHost);
+                u.userNodes = currentList.join(',');
+                updatedCount++;
             }
-        } catch (err) {
-            alert("خطا در ارتباط با سرور: " + err.message);
+        });
+
+        // ذخیره سراسری در کانفیگ پنل و دیتابیس
+        if (typeof doSaveDirectly === "function") {
+            await doSaveDirectly();
+        } else if (typeof doSave === "function") {
+            await doSave();
+        } else if (typeof saveConfig === "function") {
+            await saveConfig();
+        }
+
+        if (typeof showToast === "function") {
+            showToast(`نود به ${updatedCount} کاربر اختصاص یافت و ذخیره شد.`, "success");
+        } else {
+            alert(`نود به ${updatedCount} کاربر اختصاص یافت.`);
         }
     };
 
     window.purgeLinkedNode = async function(nodeHost, idx) {
-        if (!confirm(`آیا از حذف کامل سرور "${nodeHost}" مطمئن هستید؟ این سرور از دیتابیس و تمام کاربران حذف خواهد شد.`)) return;
+        if (!confirm(`آیا از حذف کامل سرور "${nodeHost}" اطمینان دارید؟ این نود از دیتابیس و دسترسی تمام کاربران حذف می‌شود.`)) return;
+
+        let cfg = (typeof getActivePanelConfig === "function") ? getActivePanelConfig() : (window.nahanConfig || {});
+        let targetNode = (cfg.linkedPanels && cfg.linkedPanels[idx]) ? cfg.linkedPanels[idx] : null;
+        let cleanHost = String(nodeHost || "").trim().replace(/^[a-zA-Z]+:\/\//, '').split('/')[0].split(':')[0].trim();
+        let nodeId = targetNode?.id || (targetNode?.url ? targetNode.url.replace(/^https?:\/\//, "").split("/")[0].split(".")[0] : cleanHost);
+
+        // ۱. ارسال درخواست حذف به دیتابیس D1 ورکر
         try {
-            const res = await fetch(`/api/nodes?host=${encodeURIComponent(nodeHost)}`, {
-                method: "DELETE"
+            const apiBase = (cfg.apiRoute || "sync").replace(/^\/+|\/+$/g, "");
+            await fetch(`/${apiBase}/api/nodes?id=${encodeURIComponent(nodeId)}&host=${encodeURIComponent(cleanHost)}`, {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ id: nodeId, url: targetNode?.url, host: cleanHost })
             });
-            const data = await res.json();
-            if (data.success) {
-                if (typeof showToast === "function") showToast("سرور با موفقیت حذف شد", "success");
-                if (typeof removeLinkedNode === "function") {
-                    removeLinkedNode(idx);
-                } else {
-                    location.reload();
-                }
-            } else {
-                alert("خطا در حذف سرور: " + (data.error || "نامشخص"));
-            }
-        } catch (err) {
-            alert("خطا در ارتباط: " + err.message);
+        } catch(e) {
+            console.error("خطا در ارسال حذف به دیتابیس:", e);
         }
+
+        // ۲. حذف نود از تمام کاربران
+        if (Array.isArray(cfg.users)) {
+            cfg.users.forEach(u => {
+                if (u.userNodes) {
+                    let list = u.userNodes.split(/[,\r\n;]+/).map(s => s.trim()).filter(Boolean);
+                    list = list.filter(n => n !== cleanHost && !n.includes(cleanHost));
+                    u.userNodes = list.join(',');
+                }
+            });
+        }
+
+        // ۳. حذف از آرایه نودها
+        if (Array.isArray(cfg.linkedPanels)) {
+            cfg.linkedPanels.splice(idx, 1);
+        }
+
+        // ۴. ذخیره تغییرات
+        if (typeof doSaveDirectly === "function") {
+            await doSaveDirectly();
+        } else if (typeof doSave === "function") {
+            await doSave();
+        } else if (typeof saveConfig === "function") {
+            await saveConfig();
+        }
+
+        if (typeof renderLinkedNodes === "function") renderLinkedNodes();
+        if (typeof window.renderTabNodes === "function") window.renderTabNodes();
+        if (typeof showToast === "function") showToast("نود با موفقیت از دیتابیس و کاربران پاک شد.", "success");
     };
 
 </script>

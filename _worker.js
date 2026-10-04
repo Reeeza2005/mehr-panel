@@ -1281,47 +1281,72 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
                 } catch(e) {}
             }
 
-            if (request.method === "DELETE") {
+                        if (request.method === "DELETE") {
                 try {
-                    const urlObj = new URL(request.url);
-                    const targetId = urlObj.searchParams.get("id");
-                    const nodeHost = urlObj.searchParams.get("host");
+                    let targetId = null;
+                    let nodeHost = null;
+                    try {
+                        const urlObj = new URL(request.url);
+                        targetId = urlObj.searchParams.get("id");
+                        nodeHost = urlObj.searchParams.get("host");
+                    } catch(e){}
 
-                    if (targetId) {
-                        try { await env.IOT_DB.prepare("DELETE FROM nodes WHERE id = ?").bind(targetId).run(); } catch(e){}
-                    }
+                    try {
+                        const body = await request.json();
+                        if (!targetId && body.id) targetId = body.id;
+                        if (!nodeHost && (body.host || body.url)) nodeHost = body.host || body.url;
+                    } catch(e){}
+
                     if (nodeHost) {
-                        try { await env.IOT_DB.prepare("DELETE FROM nodes WHERE name = ? OR ip = ?").bind(nodeHost, nodeHost).run(); } catch(e){}
-                        try { await env.IOT_DB.prepare("DELETE FROM node_traffic WHERE node_id = ?").bind(nodeHost).run(); } catch(e){}
+                        nodeHost = String(nodeHost).replace(/^[a-zA-Z]+:\/\//, '').split('/')[0].split(':')[0].trim();
                     }
 
-                    // پاک‌سازی از کانفیگ و لیست کاربران
-                    let sysConfig = {};
-                    const rawConf = await d1Get(env, "sys_config");
-                    if (rawConf) {
-                        sysConfig = JSON.parse(rawConf);
-                        if (Array.isArray(sysConfig.linkedPanels)) {
-                            sysConfig.linkedPanels = sysConfig.linkedPanels.filter(p => {
-                                const h = typeof p === "object" ? (p.url || p.name || "") : p;
-                                return !h.includes(nodeHost || targetId);
-                            });
+                    // حذف قطعی از جدول نودها و آمار ترافیک دیتابیس D1
+                    if (env.IOT_DB) {
+                        if (targetId) {
+                            try { await env.IOT_DB.prepare("DELETE FROM nodes WHERE id = ?").bind(targetId).run(); } catch(e){}
                         }
-                        if (Array.isArray(sysConfig.users)) {
-                            sysConfig.users.forEach(u => {
-                                if (Array.isArray(u.userNodes)) {
-                                    u.userNodes = u.userNodes.filter(n => !n.includes(nodeHost || targetId));
-                                }
-                            });
+                        if (nodeHost) {
+                            try {
+                                await env.IOT_DB.prepare("DELETE FROM nodes WHERE id = ? OR name = ? OR url LIKE ? OR address LIKE ?").bind(nodeHost, nodeHost, `%${nodeHost}%`, `%${nodeHost}%`).run();
+                            } catch(e){}
+                            try {
+                                await env.IOT_DB.prepare("DELETE FROM node_traffic WHERE node_id = ? OR node_id LIKE ?").bind(nodeHost, `%${nodeHost}%`).run();
+                            } catch(e){}
                         }
-                        await d1Put(env, "sys_config", JSON.stringify(sysConfig));
                     }
+
+                    // پاکسازی از sys_config در صورت وجود
+                    try {
+                        let sysConfig = {};
+                        const rawConf = await d1Get(env, "sys_config");
+                        if (rawConf) {
+                            sysConfig = JSON.parse(rawConf);
+                            if (Array.isArray(sysConfig.linkedPanels)) {
+                                sysConfig.linkedPanels = sysConfig.linkedPanels.filter(p => {
+                                    const h = typeof p === "object" ? (p.url || p.name || "") : p;
+                                    return !h.includes(nodeHost || targetId);
+                                });
+                            }
+                            if (Array.isArray(sysConfig.users)) {
+                                sysConfig.users.forEach(u => {
+                                    if (typeof u.userNodes === "string") {
+                                        let arr = u.userNodes.split(/[,\s]+/).filter(Boolean);
+                                        u.userNodes = arr.filter(n => !n.includes(nodeHost || targetId)).join(',');
+                                    }
+                                });
+                            }
+                            await d1Put(env, "sys_config", JSON.stringify(sysConfig));
+                        }
+                    } catch(e){}
+
                     return jsonResponse({ success: true, purged: nodeHost || targetId });
                 } catch(err) {
                     return jsonResponse({ success: false, error: err.message }, 500);
                 }
             }
-
         }
+
 if (reqPath === `${routeBase}/api/node/sync` || reqPath === "/api/node/sync" || reqPath.endsWith("/api/node/sync")) {
             try {
                 const nodeKey = request.headers.get("X-Node-Key");

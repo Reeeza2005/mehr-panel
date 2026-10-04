@@ -1087,7 +1087,12 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
                 });
             }
             try {
-                const body = await request.json();
+                let body = {};
+    try {
+      body = await request.json();
+    } catch(e) {
+      body = {};
+    }
                 if (body.config) {
                     sysConfig = { ...sysConfig, ...body.config, name: "مِهر" };
                     if (Array.isArray(body.config.users)) {
@@ -1333,7 +1338,12 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
                     } catch(e){}
 
                     try {
-                        const body = await request.json();
+                        let body = {};
+    try {
+      body = await request.json();
+    } catch(e) {
+      body = {};
+    }
                         if (!targetId && body.id) targetId = body.id;
                         if (!nodeHost && (body.host || body.url)) nodeHost = body.host || body.url;
                     } catch(e){}

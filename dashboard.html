@@ -3083,7 +3083,8 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
             if(!container) return;
             container.innerHTML = '<p class="text-sm text-slate-400 text-center py-4">' + (i18n[lang]?.loading_logs || 'Loading logs...') + '</p>';
             try {
-                const res = await fetch(baseRoute + '/api/logs', { method: 'POST', body: JSON.stringify({ key: sessionKey }) });
+                const res = await fetch(baseRoute + '/api/logs', { method: 'POST', body: JSON.stringify({
+        node_key: document.getElementById('editNodeKey')?.value?.trim() || undefined, key: sessionKey }) });
                 const data = await res.json();
                 if (data.success && data.logs) {
                     if (data.logs.length === 0) {

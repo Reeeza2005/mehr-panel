@@ -1380,18 +1380,37 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
                     } catch(e) {}
                 }
 
-                const computedNodes = (results || []).map(n => {
-                    let dReqs = Number(n.daily_requests || 0);
-                    return {
-                        ...n,
-                        daily_requests: dReqs,
-                        address: n.address || n.url,
-                        total_bytes: Number(n.total_bytes || 0),
-                        is_online: n.last_seen > 0 && (Math.floor(Date.now() / 1000) - n.last_seen) < 300 && n.status === "active",
-                        country: (n.country && n.country.length === 2 ? (n.country.toUpperCase()) : "US"),
-                        flag: getCountryFlag(n.country || "US")
-                    };
-                });
+                  const nowTs = Math.floor(Date.now() / 1000);
+                  const todayStr = new Date().toISOString().split('T')[0];
+                  const computedNodes = await Promise.all((results || []).map(async (n) => {
+                      let dReqs = Number(n.daily_requests || 0);
+                      let lastSeen = Number(n.last_seen || 0);
+                      const isStale = (!dReqs || dReqs === 0 || n.last_reset_date !== todayStr || (nowTs - lastSeen) > 900);
+                      if (isStale && (n.name || n.id) && typeof getWorkerCFUsageDirect === 'function') {
+                          try {
+                              const liveReqs = await getWorkerCFUsageDirect(env, n.name || n.id);
+                              if (liveReqs !== null) {
+                                  dReqs = liveReqs;
+                                  lastSeen = nowTs;
+                                  n.daily_requests = liveReqs;
+                                  n.last_seen = nowTs;
+                                  n.last_reset_date = todayStr;
+                                  env.IOT_DB.prepare('UPDATE nodes SET daily_requests = ?, last_reset_date = ?, last_seen = ?, status = \'active\' WHERE id = ?')
+                                      .bind(liveReqs, todayStr, nowTs, n.id).run().catch(() => {});
+                              }
+                          } catch(e) {}
+                      }
+                      const isOnline = n.status === 'active' && (lastSeen > 0 ? (nowTs - lastSeen) < 86400 : true);
+                      return {
+                          ...n,
+                          daily_requests: dReqs,
+                          address: n.address || n.url,
+                          total_bytes: Number(n.total_bytes || 0),
+                          is_online: isOnline,
+                          country: (n.country && n.country.length === 2 ? (n.country.toUpperCase()) : 'US'),
+                          flag: getCountryFlag(n.country || 'US')
+                      };
+                  }));
                 // ادغام نودهای linkedPanels که هنوز در جدول nodes نیستند
                 const existingHosts = new Set(computedNodes.map(n => 
                     String(n.address || n.url || n.id || "").replace(/^https?:\/\//, "").split("/")[0].trim().toLowerCase()

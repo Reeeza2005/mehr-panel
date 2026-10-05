@@ -12,7 +12,67 @@
       <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%236366f1'/><text x='50' y='62' font-size='40' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='bold'>N</text></svg>">
       <title>Mehr Gateway</title>
       <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;900&amp;display=swap" rel="stylesheet">
-      <script src="https://cdn.tailwindcss.com"></script>
+      <script src="https://cdn.tailwindcss.com">
+
+window.editTabNodeKey = async function(idx) {
+    const panels = window.nahanConfig?.linkedPanels || [];
+    const node = panels[idx];
+    if (!node) return;
+    const currentKey = node.apiKey || "";
+    const nodeName = node.name || node.url;
+    const newKey = prompt("کلید جدید تولیدشده توسط ویزارد را وارد کنید:\n" + nodeName, currentKey);
+    
+    if (newKey === null) return;
+    const trimmedKey = newKey.trim();
+    if (!trimmedKey || trimmedKey === currentKey) return;
+
+    // ۱. آپدیت مقدار در آبجکت محلی نود
+    node.apiKey = trimmedKey;
+    if (node.api_key !== undefined) node.api_key = trimmedKey;
+
+    // ۲. ارسال کلید جدید به دیتابیس D1 پنل
+    try {
+        const apiBase = (window.nahanConfig?.apiRoute || "sync").replace(/^\/+|\/+$/g, "");
+        const res = await fetch("/" + apiBase + "/api/nodes/update-key", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                url: node.url,
+                id: node.id,
+                apiKey: trimmedKey,
+                node_key: trimmedKey,
+                key: window.nahanConfig?.masterKey || sessionKey
+            })
+        });
+        const data = await res.json().catch(() => ({}));
+        console.log("DB Key update response:", data);
+    } catch(err) {
+        console.warn("DB update sync note:", err);
+    }
+
+    // ۳. ذخیره سازی کانفیگ و رندر مجدد تب‌ها
+    if (typeof renderTabNodes === "function") renderTabNodes();
+    if (typeof renderLinkedNodes === "function") renderLinkedNodes();
+    if (typeof saveConfig === "function") await saveConfig();
+    if (typeof showToast === "function") showToast("کلید جدید نود با موفقیت در دیتابیس و پنل ذخیره شد", "success");
+};
+
+window.editNodeKeyFromTab = function(idx) {
+    const panels = window.nahanConfig?.linkedPanels || [];
+    const node = panels[idx];
+    if (!node) return;
+    const currentKey = node.apiKey || "";
+    const newKey = prompt("کلید جدید تولیدشده توسط ویزارد را وارد کنید:\n" + (node.name || node.url), currentKey);
+    if (newKey !== null && newKey.trim() !== "" && newKey.trim() !== currentKey) {
+        node.apiKey = newKey.trim();
+        if (typeof renderLinkedNodes === "function") renderLinkedNodes();
+        if (typeof renderTabNodes === "function") renderTabNodes();
+        if (typeof saveConfig === "function") saveConfig();
+        if (typeof showToast === "function") showToast("کلید نود با موفقیت ذخیره شد", "success");
+    }
+};
+
+</script>
             <script>
           tailwind.config = {
     darkMode: 'class',
@@ -3084,7 +3144,7 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
             container.innerHTML = '<p class="text-sm text-slate-400 text-center py-4">' + (i18n[lang]?.loading_logs || 'Loading logs...') + '</p>';
             try {
                 const res = await fetch(baseRoute + '/api/logs', { method: 'POST', body: JSON.stringify({
-        node_key: document.getElementById('editNodeKey')?.value?.trim() || undefined, key: sessionKey }) });
+        key: sessionKey }) });
                 const data = await res.json();
                 if (data.success && data.logs) {
                     if (data.logs.length === 0) {
@@ -5711,7 +5771,12 @@ window.renderTabNodes = function () {
 
                         <div class="text-xs font-mono text-slate-700 dark:text-slate-200 break-all bg-slate-50 dark:bg-darkcard/80 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder flex items-center justify-between">
                             <span>${host}</span>
-                            ${apiKey ? `<span class="text-[10px] text-slate-400 font-mono" title="API Key: ${apiKey}">🔑 ${apiKey.substring(0, 8)}...</span>` : ""}
+                            <div class="flex items-center gap-1.5">
+                                 ${apiKey ? `<span class="text-[10px] text-slate-400 font-mono" title="API Key: ${apiKey}">🔑 ${apiKey.substring(0, 8)}...</span>` : `<span class="text-[10px] text-amber-500 font-mono">بدون کلید</span>`}
+                                 <button type="button" onclick="editTabNodeKey(${idx})" class="p-1 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-500 rounded transition-colors" title="ویرایش کلید نود">
+                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                                 </button>
+                             </div>
                         </div>
 
                         <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">

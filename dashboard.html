@@ -3376,7 +3376,23 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
               try { renderLinkedNodes(); if(typeof renderTabNodes === "function") renderTabNodes();  } catch(e){}
           }
 
-          function renderLinkedNodes() {
+          
+            window.editLinkedNodeKey = function(idx) {
+                const panels = window.nahanConfig?.linkedPanels || [];
+                const node = panels[idx];
+                if (!node) return;
+                const currentKey = node.apiKey || "";
+                const newKey = prompt("کلید احراز هویت جدید نود (API Key) را وارد کنید:\n" + node.url, currentKey);
+                if (newKey !== null && newKey.trim() !== "" && newKey.trim() !== currentKey) {
+                    node.apiKey = newKey.trim();
+                    renderLinkedNodes();
+                    if (typeof renderTabNodes === "function") renderTabNodes();
+                    if (typeof saveConfig === "function") saveConfig();
+                    if (typeof showToast === "function") showToast("کلید نود با موفقیت بروزرسانی شد", "success");
+                }
+            };
+
+function renderLinkedNodes() {
               const list = document.getElementById('linked-nodes-list');
               if (!list) return;
               const panels = (window.nahanConfig && Array.isArray(window.nahanConfig.linkedPanels)) ? window.nahanConfig.linkedPanels : [];
@@ -3405,7 +3421,10 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                           </div>
                       </div>
                       <div class="flex items-center gap-1">
-                          <button onclick="fetchClusterStats()" class="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors shrink-0 text-slate-400" title="Ping Test">
+                          <button onclick="editLinkedNodeKey(${i})" class="p-1.5 hover:bg-amber-100 dark:hover:bg-amber-900/30 rounded-lg transition-colors shrink-0 text-amber-500" title="ویرایش کلید نود">
+                               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                           </button>
+                           <button onclick="fetchClusterStats()" class="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors shrink-0 text-slate-400" title="Ping Test">
                               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
                           </button>
                           <button onclick="removeLinkedNode(${i})" class="p-1.5 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors shrink-0" title="Remove">

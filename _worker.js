@@ -1233,6 +1233,32 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
         }
 
         // مدیریت نودها در دیتابیس رابطه‌ای D1
+                // بروزرسانی مستقیم کلید نود در دیتابیس D1
+        if (reqPath === `${routeBase}/api/nodes/update-key` || reqPath.endsWith("/api/nodes/update-key")) {
+            if (request.method === "POST") {
+                try {
+                    const b = await request.json().catch(() => ({}));
+                    const targetUrl = (b.url || "").replace(/^https?:\/\//, "").split("/")[0].trim();
+                    const targetKey = (b.apiKey || b.node_key || "").trim();
+                    const targetId = b.id || "";
+                    if (env.IOT_DB && targetKey) {
+                        await env.IOT_DB.prepare(`
+                            UPDATE nodes 
+                            SET node_key = ? 
+                            WHERE address LIKE ? OR id = ? OR name LIKE ?
+                        `).bind(targetKey, '%' + targetUrl + '%', targetId, '%' + (b.url || "") + '%').run();
+                    }
+                    return new Response(JSON.stringify({ success: true, updated: true }), {
+                        headers: { "Content-Type": "application/json", ...corsHeaders }
+                    });
+                } catch(e) {
+                    return new Response(JSON.stringify({ success: false, error: e.message }), {
+                        headers: { "Content-Type": "application/json", ...corsHeaders }, status: 500
+                    });
+                }
+            }
+        }
+
         if (reqPath === `${routeBase}/api/nodes` || reqPath.endsWith("/api/nodes")) {
             if (request.method === "GET") {
                 const { results } = await env.IOT_DB.prepare(`

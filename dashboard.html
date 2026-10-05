@@ -14,49 +14,6 @@
       <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;900&amp;display=swap" rel="stylesheet">
       <script src="https://cdn.tailwindcss.com">
 
-window.editTabNodeKey = async function(idx) {
-    const panels = window.nahanConfig?.linkedPanels || [];
-    const node = panels[idx];
-    if (!node) return;
-    const currentKey = node.apiKey || "";
-    const nodeName = node.name || node.url;
-    const newKey = prompt("کلید جدید تولیدشده توسط ویزارد را وارد کنید:\n" + nodeName, currentKey);
-    
-    if (newKey === null) return;
-    const trimmedKey = newKey.trim();
-    if (!trimmedKey || trimmedKey === currentKey) return;
-
-    // ۱. آپدیت مقدار در آبجکت محلی نود
-    node.apiKey = trimmedKey;
-    if (node.api_key !== undefined) node.api_key = trimmedKey;
-
-    // ۲. ارسال کلید جدید به دیتابیس D1 پنل
-    try {
-        const apiBase = (window.nahanConfig?.apiRoute || "sync").replace(/^\/+|\/+$/g, "");
-        const res = await fetch("/" + apiBase + "/api/nodes/update-key", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                url: node.url,
-                id: node.id,
-                apiKey: trimmedKey,
-                node_key: trimmedKey,
-                key: window.nahanConfig?.masterKey || sessionKey
-            })
-        });
-        const data = await res.json().catch(() => ({}));
-        console.log("DB Key update response:", data);
-    } catch(err) {
-        console.warn("DB update sync note:", err);
-    }
-
-    // ۳. ذخیره سازی کانفیگ و رندر مجدد تب‌ها
-    if (typeof renderTabNodes === "function") renderTabNodes();
-    if (typeof renderLinkedNodes === "function") renderLinkedNodes();
-    if (typeof saveConfig === "function") await saveConfig();
-    if (typeof showToast === "function") showToast("کلید جدید نود با موفقیت در دیتابیس و پنل ذخیره شد", "success");
-};
-
 window.editNodeKeyFromTab = function(idx) {
     const panels = window.nahanConfig?.linkedPanels || [];
     const node = panels[idx];
@@ -70,6 +27,45 @@ window.editNodeKeyFromTab = function(idx) {
         if (typeof saveConfig === "function") saveConfig();
         if (typeof showToast === "function") showToast("کلید نود با موفقیت ذخیره شد", "success");
     }
+};
+
+
+window.editTabNodeKey = async function(idx) {
+    const panels = window.nahanConfig?.linkedPanels || [];
+    const node = panels[idx];
+    if (!node) return;
+    const currentKey = node.apiKey || "";
+    const nodeName = node.name || node.url;
+    const newKey = prompt("کلید جدید تولیدشده توسط ویزارد را وارد کنید:\n" + nodeName, currentKey);
+    
+    if (newKey === null) return;
+    const trimmedKey = newKey.trim();
+    if (!trimmedKey || trimmedKey === currentKey) return;
+
+    node.apiKey = trimmedKey;
+    if (node.api_key !== undefined) node.api_key = trimmedKey;
+
+    try {
+        const apiBase = (window.nahanConfig?.apiRoute || "sync").replace(/^\/+|\/+$/g, "");
+        await fetch("/" + apiBase + "/api/nodes/update-key", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                url: node.url,
+                id: node.id,
+                apiKey: trimmedKey,
+                node_key: trimmedKey,
+                key: window.nahanConfig?.masterKey || sessionKey
+            })
+        });
+    } catch(err) {
+        console.warn("DB update sync:", err);
+    }
+
+    if (typeof renderTabNodes === "function") renderTabNodes();
+    if (typeof renderLinkedNodes === "function") renderLinkedNodes();
+    if (typeof saveConfig === "function") await saveConfig();
+    if (typeof showToast === "function") showToast("کلید جدید نود با موفقیت در دیتابیس و پنل ذخیره شد", "success");
 };
 
 </script>

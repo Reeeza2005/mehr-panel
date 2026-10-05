@@ -6004,5 +6004,47 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 </script>
 
+<script>
+
+window.editTabNodeKey = async function(idx) {
+    try {
+        const panels = (window.nahanConfig && Array.isArray(window.nahanConfig.linkedPanels)) ? window.nahanConfig.linkedPanels : [];
+        const node = panels[idx];
+        if (!node) {
+            alert("Unknown node");
+            return;
+        }
+        const currentKey = (typeof node === "object" ? (node.apiKey || node.node_key || "") : "");
+        const nodeUrl = typeof node === "object" ? (node.url || node.name || "") : String(node);
+        const newKey = prompt("Enter new key:\n" + nodeUrl, currentKey);
+        if (newKey === null) return;
+        const cleanKey = newKey.trim();
+        if (!cleanKey) {
+            alert("Invalid key");
+            return;
+        }
+        if (cleanKey === currentKey) return;
+        if (typeof node === "object") {
+            node.apiKey = cleanKey;
+            node.node_key = cleanKey;
+        }
+        const apiBase = (window.nahanConfig&&window.nahanConfig.apiRoute ? window.nahanConfig.apiRoute : "sync").replace(/^\/+|\/+$/g, "");
+        try {
+            await fetch("/" + apiBase + "/api/nodes/update-key", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ url: nodeUrl, id: node.id || "", apiKey: cleanKey, node_key: cleanKey })
+            });
+        } catch(e){}
+        if (typeof renderTabNodes === "function") renderTabNodes();
+        if (typeof renderLinkedNodes === "function") renderLinkedNodes();
+        if (typeof saveConfig === "function") await saveConfig();
+        alert("کلید با بوفحیت ذخیر؇ شد.");
+    } catch(err) {
+        alert("Error: " + err.message);
+    }
+};
+
+</script>
 </body>
 </html>

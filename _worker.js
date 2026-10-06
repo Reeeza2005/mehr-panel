@@ -10,7 +10,7 @@ function safeBtoa(str) {
 }
 
 async function syncNodeToD1(env, id, name, url, apiKey) {
-    if (!env.IOT_DB || !url) return;
+    if (!(env.DB || env.IOT_DB) || !url) return;
     const cleanH = url.replace(/^[a-zA-Z]+:\/\//, "").split("/")[0].split("@").pop().split(":")[0].toLowerCase();
     const fullUrl = url.startsWith("http") ? url : ("https://" + url);
     let country = "";
@@ -19,7 +19,7 @@ async function syncNodeToD1(env, id, name, url, apiKey) {
         country = pingRes.headers.get("cf-ipcountry") || (pingRes.cf && pingRes.cf.country) || "";
     } catch(e) {}
     try {
-        await env.IOT_DB.prepare(
+        await (env.DB || env.IOT_DB).prepare(
             "INSERT INTO nodes (id, name, url, address, api_key, status, country, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, unixepoch()) ON CONFLICT(id) DO UPDATE SET url = excluded.url, address = excluded.address, country = COALESCE(NULLIF(excluded.country, ''), nodes.country)"
         ).bind(id, name, fullUrl, cleanH, apiKey, "active", country).run();
     } catch(err) {
@@ -239,9 +239,9 @@ function generateInfoConfigs(sysConf, userRec, usedBytes, host) {
 
 async function getLiveUsageMap(env, sysConfig) {
 	let usageMap = {};
-	if (!env || !env.IOT_DB) return usageMap;
+	if (!env || !(env.DB || env.IOT_DB)) return usageMap;
 	try {
-		const { results } = await env.IOT_DB.prepare(
+		const { results } = await (env.DB || env.IOT_DB).prepare(
 			"SELECT uuid, used_traffic, last_seen FROM users WHERE used_traffic > 0 ORDER BY last_seen DESC LIMIT 50"
 		).all();
 		if (results && results.length > 0) {
@@ -312,24 +312,24 @@ const SYSTEM_DEFAULTS = {
 let sysConfig = { ...SYSTEM_DEFAULTS };
 
 async function d1Get(env, key) {
-    if (!env.IOT_DB) return null;
+    if (!(env.DB || env.IOT_DB)) return null;
     try {
-        const { results } = await env.IOT_DB.prepare("SELECT value FROM kv_store WHERE key = ?").bind(key).all();
+        const { results } = await (env.DB || env.IOT_DB).prepare("SELECT value FROM kv_store WHERE key = ?").bind(key).all();
         if (results && results.length > 0) return results[0].value;
     } catch(e) {}
     return null;
 }
 
 async function d1Put(env, key, value) {
-    if (!env.IOT_DB) return;
+    if (!(env.DB || env.IOT_DB)) return;
     try {
-        await env.IOT_DB.prepare("INSERT OR REPLACE INTO kv_store (key, value) VALUES (?, ?)").bind(key, value).run();
+        await (env.DB || env.IOT_DB).prepare("INSERT OR REPLACE INTO kv_store (key, value) VALUES (?, ?)").bind(key, value).run();
     } catch(e) {}
 }
 
 async function loadConfig(env) {
     try {
-        if (!env.IOT_DB) return;
+        if (!(env.DB || env.IOT_DB)) return;
         const confStr = await d1Get(env, "sys_config");
         if (confStr) {
             sysConfig = { ...SYSTEM_DEFAULTS, ...JSON.parse(confStr), name: "مِهر", githubRepo: "Reeeza2005/mehr-panel" };
@@ -354,7 +354,7 @@ export default {
     ctx.waitUntil((async () => {
       try {
         const now = Math.floor(Date.now() / 1000);
-        await env.IOT_DB.prepare(
+        await (env.DB || env.IOT_DB).prepare(
           "UPDATE nodes SET status = 'inactive' WHERE ? - last_seen > 300 AND status = 'active'"
         ).bind(now).run();
       } catch (e) {}
@@ -362,18 +362,6 @@ export default {
   },
 
     async fetch(request, env, ctx) {
-        const _earlyUrl = new URL(request.url);
-        let _p = _earlyUrl.pathname;
-        if (_p.endsWith("/") && _p.length > 1) _p = _p.slice(0, -1);
-        if (_p === "/sync/dash" || _p === "/dash" || _p.endsWith("/dash")) {
-            let html = HTML_CONTENT
-                .replace(/__CURRENT_VERSION__/g, CURRENT_VERSION)
-                .replace(/__HAS_DB_WARNING__/g, "");
-            return new Response(html, {
-                headers: { "Content-Type": "text/html; charset=utf-8" },
-            });
-        }
-
         await loadConfig(env);
         const url = new URL(request.url);
         let reqPath = url.pathname;
@@ -461,9 +449,9 @@ export default {
                 }
 
                 // 2. جستجو در دیتابیس D1 در صورت عدم یافتن در حافظه کانفیگ
-                if (!userRecord && env.IOT_DB) {
+                if (!userRecord && (env.DB || env.IOT_DB)) {
                     try {
-                        userRecord = await env.IOT_DB.prepare("SELECT * FROM users WHERE lower(username) = ? OR lower(uuid) = ? OR lower(id) = ?").bind(cleanId, cleanId, cleanId).first();
+                        userRecord = await (env.DB || env.IOT_DB).prepare("SELECT * FROM users WHERE lower(username) = ? OR lower(uuid) = ? OR lower(id) = ?").bind(cleanId, cleanId, cleanId).first();
                     } catch(e) {}
                 }
 
@@ -481,10 +469,10 @@ export default {
                 // استخراج نودهای فعال
                 // استخراج نودهای فعال و نودهای فرعی BPB
                 let nodesList = [];
-if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nodes WHERE status='active' AND (address IS NOT NULL OR url IS NOT NULL)").all();if(nR&&nR.length>0){nodeTargets=nR.map(n=>({name:n.name||"Edge",host:(n.address||n.url||"").replace(/^https?:\/\//,"").split("/")[0].trim(),path:"vl",isNode:true})).filter(n=>n.host.length>0);}}catch(e){}}
-    if (env.IOT_DB) {
+if((env.DB || env.IOT_DB)) {try{const{results:nR}=await (env.DB || env.IOT_DB).prepare("SELECT * FROM nodes WHERE status='active' AND (address IS NOT NULL OR url IS NOT NULL)").all();if(nR&&nR.length>0){nodeTargets=nR.map(n=>({name:n.name||"Edge",host:(n.address||n.url||"").replace(/^https?:\/\//,"").split("/")[0].trim(),path:"vl",isNode:true})).filter(n=>n.host.length>0);}}catch(e){}}
+    if ((env.DB || env.IOT_DB)) {
         try {
-            const { results } = await env.IOT_DB.prepare("SELECT * FROM nodes WHERE status = 'active' AND (address IS NOT NULL OR url IS NOT NULL)").all();
+            const { results } = await (env.DB || env.IOT_DB).prepare("SELECT * FROM nodes WHERE status = 'active' AND (address IS NOT NULL OR url IS NOT NULL)").all();
             nodesList = (results || []).map(n => {
                  const h = (n.address || n.url || "").replace(/^https?:\/\//, "").split("/")[0].trim();
                  let isUp = false;
@@ -505,9 +493,9 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
             if (nodesList.length > 0) nodeTargets = nodesList;
         } catch(e) {}
     }
-    if (env.IOT_DB) {
+    if ((env.DB || env.IOT_DB)) {
         try {
-            const { results } = await env.IOT_DB.prepare("SELECT * FROM nodes WHERE status = 'active' AND (address IS NOT NULL OR url IS NOT NULL)").all();
+            const { results } = await (env.DB || env.IOT_DB).prepare("SELECT * FROM nodes WHERE status = 'active' AND (address IS NOT NULL OR url IS NOT NULL)").all();
             nodesList = (results || []).map(n => {
                  const h = (n.address || n.url || "").replace(/^https?:\/\//, "").split("/")[0].trim();
                  let isUp = false;
@@ -528,9 +516,9 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
             if (nodesList.length > 0) nodeTargets = nodesList;
         } catch(e) {}
     }
-    if (env.IOT_DB) {
+    if ((env.DB || env.IOT_DB)) {
         try {
-            const { results } = await env.IOT_DB.prepare("SELECT * FROM nodes WHERE status = 'active' AND (address IS NOT NULL OR url IS NOT NULL)").all();
+            const { results } = await (env.DB || env.IOT_DB).prepare("SELECT * FROM nodes WHERE status = 'active' AND (address IS NOT NULL OR url IS NOT NULL)").all();
             nodesList = (results || []).filter(n => (n.address || n.url)).map(n => {
                 let h = (n.address || n.url || "").replace(/^https?:\/\//, "").split("/")[0].trim();
                 return { host: h, name: n.name || "Node", isNode: true, path: "vl" };
@@ -556,9 +544,9 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
                 if (sysConfig && Array.isArray(sysConfig.nodes)) {
                     nodesList = nodesList.concat(sysConfig.nodes.filter(n => n.status === "active"));
                 }
-                if (nodesList.length === 0 && env.IOT_DB) {
+                if (nodesList.length === 0 && (env.DB || env.IOT_DB)) {
                     try {
-                        const nRes = await env.IOT_DB.prepare("SELECT * FROM nodes WHERE status = 'active' AND (address IS NOT NULL OR url IS NOT NULL)").all();
+                        const nRes = await (env.DB || env.IOT_DB).prepare("SELECT * FROM nodes WHERE status = 'active' AND (address IS NOT NULL OR url IS NOT NULL)").all();
                         nodesList = nodesList.concat(nRes.results || []);
                     } catch(e) {}
                 }
@@ -729,8 +717,8 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
                 } else {
                     targetMode = (userRecord.userMode || "both").toLowerCase();
                 }
-                const allowVless = targetMode !== "beta";
-                const allowTrojan = targetMode === "beta";
+                const allowVless = targetMode === "alpha" || targetMode === "both";
+                const allowTrojan = targetMode === "beta" || targetMode === "both";
 
                 let cfgIndex = 0;
             
@@ -855,7 +843,7 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
                 let usedBytes = 0;
                 try {
                     // ۱. ابتدا از مصرف ثبت‌شده در جدول users بخوانیم
-                    const uRow = await env.IOT_DB.prepare("SELECT used_traffic FROM users WHERE uuid = ? OR id = ?").bind(userUuid, userUuid).first();
+                    const uRow = await (env.DB || env.IOT_DB).prepare("SELECT used_traffic FROM users WHERE uuid = ? OR id = ?").bind(userUuid, userUuid).first();
                     if (uRow && uRow.used_traffic) {
                         usedBytes = Number(uRow.used_traffic);
                     } else if (userRecord && (userRecord.usedTraffic || userRecord.used_traffic)) {
@@ -956,7 +944,7 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
 
                     let users = Array.isArray(sysConfig.users) ? sysConfig.users : [];
                     try {
-                        const { results } = await env.IOT_DB.prepare("SELECT uuid, used_traffic FROM users").all();
+                        const { results } = await (env.DB || env.IOT_DB).prepare("SELECT uuid, used_traffic FROM users").all();
                         const trafficMap = {};
                         if (results) {
                             results.forEach(r => { trafficMap[r.uuid] = r.used_traffic; });
@@ -1126,14 +1114,14 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
                             const currentUuids = sysConfig.users.map(u => u.uuid || u.id);
                             if (currentUuids.length > 0) {
                                 const placeholders = currentUuids.map(() => '?').join(',');
-                                await env.IOT_DB.prepare(`DELETE FROM users WHERE uuid NOT IN (${placeholders})`).bind(...currentUuids).run();
+                                await (env.DB || env.IOT_DB).prepare(`DELETE FROM users WHERE uuid NOT IN (${placeholders})`).bind(...currentUuids).run();
                             } else {
-                                await env.IOT_DB.prepare("DELETE FROM users").run();
+                                await (env.DB || env.IOT_DB).prepare("DELETE FROM users").run();
                             }
 
                             for (const u of sysConfig.users) {
                                 const uid = u.uuid || u.id;
-                                await env.IOT_DB.prepare(`
+                                await (env.DB || env.IOT_DB).prepare(`
                                     INSERT OR REPLACE INTO users (id, uuid, username, name, traffic_limit, used_traffic, status, expiry_date, created_at)
                                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT created_at FROM users WHERE uuid = ?), ?))
                                 `).bind(
@@ -1165,7 +1153,7 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
         }
             let users = [];
             try {
-                const uRes = await env.IOT_DB.prepare("SELECT * FROM users").all();
+                const uRes = await (env.DB || env.IOT_DB).prepare("SELECT * FROM users").all();
                 users = uRes.results || [];
             } catch(e) {
                 users = Array.isArray(sysConfig.users) ? sysConfig.users : [];
@@ -1180,7 +1168,7 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
 
             let nodeList = [];
             try {
-                const nRes = await env.IOT_DB.prepare("SELECT * FROM nodes").all();
+                const nRes = await (env.DB || env.IOT_DB).prepare("SELECT * FROM nodes").all();
                 nodeList = nRes.results || [];
             } catch(e) {}
 
@@ -1253,8 +1241,8 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
                     const targetUrl = (b.url || "").replace(/^https?:\/\//, "").split("/")[0].trim();
                     const targetKey = (b.apiKey || b.node_key || "").trim();
                     const targetId = b.id || "";
-                    if (env.IOT_DB && targetKey) {
-                        await env.IOT_DB.prepare(`
+                    if ((env.DB || env.IOT_DB) && targetKey) {
+                        await (env.DB || env.IOT_DB).prepare(`
                             UPDATE nodes 
                             SET node_key = ? 
                             WHERE address LIKE ? OR id = ? OR name LIKE ?
@@ -1273,32 +1261,21 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
 
         if (reqPath === `${routeBase}/api/nodes` || reqPath.endsWith("/api/nodes")) {
             if (request.method === "GET") {
-                try {
-                    if (!env.IOT_DB) return jsonResponse({ success: true, nodes: [] });
-                    const { results } = await env.IOT_DB.prepare(`
-                        SELECT n.*, 
-                               COALESCE(SUM(nt.bytes_uploaded + nt.bytes_downloaded), 0) AS total_bytes
-                        FROM nodes n
-                        LEFT JOIN node_traffic nt ON (nt.node_id = n.id OR nt.node_id LIKE '%' || n.id || '%')
-                        GROUP BY n.id
-                        ORDER BY n.created_at DESC
-                    `).all();
-                    const computedNodes = (results || []).map(n => {
-                        let flag = "🌐";
-                        try { if (typeof getCountryFlag === "function") flag = getCountryFlag(n.country || "US"); } catch(_) {}
-                        return {
-                            ...n,
-                            address: n.address || n.url,
-                            total_bytes: Number(n.total_bytes || 0),
-                            is_online: n.last_seen > 0 && (Math.floor(Date.now() / 1000) - n.last_seen) < 300 && n.status === "active",
-                            country: (n.country && n.country.length === 2 ? (n.country.toUpperCase()) : "US"),
-                            flag: flag
-                        };
-                    });
-                    return jsonResponse({ success: true, nodes: computedNodes });
-                } catch (e) {
-                    return jsonResponse({ success: true, nodes: [], error: e.message });
-                }
+                const { results } = await (env.DB || env.IOT_DB).prepare(`
+                    SELECT n.*, 
+                           COALESCE(SUM(nt.bytes_uploaded + nt.bytes_downloaded), 0) AS total_bytes
+                    FROM nodes n
+                    LEFT JOIN node_traffic nt ON (nt.node_id = n.id OR nt.node_id LIKE '%' || n.id || '%')
+                    GROUP BY n.id
+                    ORDER BY n.created_at DESC
+                `).all();
+                const computedNodes = (results || []).map(n => ({
+                    ...n,
+                    address: n.address || n.url,
+                    total_bytes: Number(n.total_bytes || 0),
+                    is_online: n.last_seen > 0 && (Math.floor(Date.now() / 1000) - n.last_seen) < 300 && n.status === "active", country: (n.country && n.country.length === 2 ? (n.country.toUpperCase()) : "US"), flag: getCountryFlag(n.country || "US")
+                }));
+                return jsonResponse({ success: true, nodes: computedNodes });
             }
                         if (request.method === "PUT") {
                 try {
@@ -1307,7 +1284,7 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
                     if (!nodeId) {
                         return jsonResponse({ success: false, error: "Missing node id" }, 400);
                     }
-                    await env.IOT_DB.prepare(
+                    await (env.DB || env.IOT_DB).prepare(
                         "UPDATE nodes SET name = COALESCE(?, name), address = COALESCE(?, address), url = COALESCE(?, url), status = COALESCE(?, status) WHERE id = ?"
                     ).bind(b.name || null, b.address || b.url || null, b.url || b.address || null, b.status || null, nodeId).run();
                     return jsonResponse({ success: true, message: "Node updated successfully" });
@@ -1331,7 +1308,7 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
                     } catch(e) {}
                 }
 
-                await env.IOT_DB.prepare(
+                await (env.DB || env.IOT_DB).prepare(
                     "INSERT OR REPLACE INTO nodes (id, name, url, address, api_key, status, country, last_seen, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT created_at FROM nodes WHERE id = ?), ?))"
                 ).bind(
                     id, 
@@ -1402,16 +1379,16 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
                     }
 
                     // حذف قطعی از جدول نودها و آمار ترافیک دیتابیس D1
-                    if (env.IOT_DB) {
+                    if ((env.DB || env.IOT_DB)) {
                         if (targetId) {
-                            try { await env.IOT_DB.prepare("DELETE FROM nodes WHERE id = ?").bind(targetId).run(); } catch(e){}
+                            try { await (env.DB || env.IOT_DB).prepare("DELETE FROM nodes WHERE id = ?").bind(targetId).run(); } catch(e){}
                         }
                         if (nodeHost) {
                             try {
-                                await env.IOT_DB.prepare("DELETE FROM nodes WHERE id = ? OR name = ? OR url LIKE ? OR address LIKE ?").bind(nodeHost, nodeHost, `%${nodeHost}%`, `%${nodeHost}%`).run();
+                                await (env.DB || env.IOT_DB).prepare("DELETE FROM nodes WHERE id = ? OR name = ? OR url LIKE ? OR address LIKE ?").bind(nodeHost, nodeHost, `%${nodeHost}%`, `%${nodeHost}%`).run();
                             } catch(e){}
                             try {
-                                await env.IOT_DB.prepare("DELETE FROM node_traffic WHERE node_id = ? OR node_id LIKE ?").bind(nodeHost, `%${nodeHost}%`).run();
+                                await (env.DB || env.IOT_DB).prepare("DELETE FROM node_traffic WHERE node_id = ? OR node_id LIKE ?").bind(nodeHost, `%${nodeHost}%`).run();
                             } catch(e){}
                         }
                     }
@@ -1464,7 +1441,7 @@ if (reqPath === `${routeBase}/api/node/sync` || reqPath === "/api/node/sync" || 
                 const nodeCountry = b.country || "";
                 const reqDelta = parseInt(b.requests_delta || b.requests || 0) || 0;
 
-                await env.IOT_DB.prepare(`
+                await (env.DB || env.IOT_DB).prepare(`
                     INSERT INTO nodes (id, name, url, api_key, created_at, status, country, daily_requests, last_reset_date, last_seen)
                     VALUES (?, ?, ?, ?, ?, "active", ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
@@ -1488,7 +1465,7 @@ if (reqPath === `${routeBase}/api/node/sync` || reqPath === "/api/node/sync" || 
                 const userUuid = report.uuid;
 
                 // ثبت در دیتابیس D1
-                await env.IOT_DB.prepare(`
+                await (env.DB || env.IOT_DB).prepare(`
                     INSERT INTO node_traffic (user_uuid, node_id, bytes_uploaded, bytes_downloaded, last_update)
                     VALUES (?, ?, ?, ?, ?)
                     ON CONFLICT(user_uuid, node_id) DO UPDATE SET
@@ -1500,14 +1477,14 @@ if (reqPath === `${routeBase}/api/node/sync` || reqPath === "/api/node/sync" || 
                 // بروزرسانی ترافیک مصرفی روی خود نود (سرور)
                 if (deltaBytes > 0 && nodeId) {
                     try {
-                        await env.IOT_DB.prepare(
+                        await (env.DB || env.IOT_DB).prepare(
                             "UPDATE nodes SET last_seen = ?, status = 'active' WHERE id = ? OR address LIKE ?"
                         ).bind(now, nodeId, "%" + nodeId + "%").run();
                     } catch(e) {}
                 }
 
                 if (deltaBytes > 0) {
-                    await env.IOT_DB.prepare(
+                    await (env.DB || env.IOT_DB).prepare(
                         "UPDATE users SET used_traffic = used_traffic + ? WHERE uuid = ?"
                     ).bind(deltaBytes, userUuid).run();
 
@@ -1533,7 +1510,7 @@ if (reqPath === `${routeBase}/api/node/sync` || reqPath === "/api/node/sync" || 
             await cachedD1Put(env, "sys_usage", JSON.stringify(sysUsageCache));
         }
 
-        const { results: blocked } = await env.IOT_DB.prepare(
+        const { results: blocked } = await (env.DB || env.IOT_DB).prepare(
                     "SELECT uuid FROM users WHERE status != \"active\" OR (traffic_limit > 0 AND used_traffic >= traffic_limit)"
                 ).all();
 
@@ -1561,13 +1538,13 @@ if (reqPath === `${routeBase}/api/node/sync` || reqPath === "/api/node/sync" || 
         // مدیریت 
         if (reqPath === `${routeBase}/api/users` || reqPath.endsWith("/api/users")) {
             if (request.method === "GET") {
-                const { results } = await env.IOT_DB.prepare("SELECT * FROM users ORDER BY created_at DESC").all();
+                const { results } = await (env.DB || env.IOT_DB).prepare("SELECT * FROM users ORDER BY created_at DESC").all();
                 return jsonResponse({ success: true, users: results || [] });
             }
             if (request.method === "POST") {
                 const b = await request.json();
                 const id = b.id || "usr_" + Date.now();
-                await env.IOT_DB.prepare(`
+                await (env.DB || env.IOT_DB).prepare(`
                     INSERT OR REPLACE INTO users 
                     (id, username, uuid, traffic_limit, used_traffic, expiry_date, status, block_porn, block_ads, block_social, anti_sanction, custom_settings)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -1581,7 +1558,7 @@ if (reqPath === `${routeBase}/api/node/sync` || reqPath === "/api/node/sync" || 
             }
             if (request.method === "DELETE") {
                 const b = await request.json();
-                await env.IOT_DB.prepare("DELETE FROM users WHERE id = ? OR uuid = ?").bind(b.id, b.uuid || b.id).run();
+                await (env.DB || env.IOT_DB).prepare("DELETE FROM users WHERE id = ? OR uuid = ?").bind(b.id, b.uuid || b.id).run();
                 return jsonResponse({ success: true });
             }
         }
@@ -1589,25 +1566,25 @@ if (reqPath === `${routeBase}/api/node/sync` || reqPath === "/api/node/sync" || 
         // مخزن آی‌پی‌های 
         if (reqPath === `${routeBase}/api/clean-ips` || reqPath.endsWith("/api/clean-ips")) {
             if (request.method === "GET") {
-                const { results } = await env.IOT_DB.prepare("SELECT * FROM clean_ips").all();
+                const { results } = await (env.DB || env.IOT_DB).prepare("SELECT * FROM clean_ips").all();
                 return jsonResponse({ success: true, ips: results || [] });
             }
             if (request.method === "POST") {
                 const b = await request.json();
                 const id = b.id || "cip_" + Date.now();
-                await env.IOT_DB.prepare("INSERT OR REPLACE INTO clean_ips (id, ip, operator, status) VALUES (?, ?, ?, ?)").bind(id, b.ip, b.operator || "ALL", "active").run();
+                await (env.DB || env.IOT_DB).prepare("INSERT OR REPLACE INTO clean_ips (id, ip, operator, status) VALUES (?, ?, ?, ?)").bind(id, b.ip, b.operator || "ALL", "active").run();
                 return jsonResponse({ success: true });
             }
             if (request.method === "DELETE") {
                 const b = await request.json();
-                await env.IOT_DB.prepare("DELETE FROM clean_ips WHERE id = ? OR ip = ?").bind(b.id, b.ip || b.id).run();
+                await (env.DB || env.IOT_DB).prepare("DELETE FROM clean_ips WHERE id = ? OR ip = ?").bind(b.id, b.ip || b.id).run();
                 return jsonResponse({ success: true });
             }
         }
 
         // سابسکریپشن 
         if (reqPath === routeBase) {
-            const { results: activeUsers } = await env.IOT_DB.prepare("SELECT uuid FROM users WHERE status = 'active' LIMIT 1").all();
+            const { results: activeUsers } = await (env.DB || env.IOT_DB).prepare("SELECT uuid FROM users WHERE status = 'active' LIMIT 1").all();
             const uuid = (activeUsers && activeUsers.length > 0) ? activeUsers[0].uuid : "mehr-default-uuid";
             const vlessUrl = `vless://${uuid}@1.1.1.1:443?encryption=none&security=tls&type=ws&host=${url.hostname}&path=%2F${sysConfig.apiRoute}#Mehr-Hub`;
             return new Response(safeB64(vlessUrl), {

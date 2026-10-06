@@ -1,4 +1,59 @@
 <!DOCTYPE html><html lang="en" class="dark"><head>
+<script>
+window.deleteTabNodeCascade = async function(idx) {
+    if (!confirm("آیا از حذف کامل و ریشه‌ای این نود مطمئن هستید؟")) return;
+    var panels = (window.nahanConfig && window.nahanConfig.linkedPanels) || [];
+    var node = panels[idx];
+    if (!node) return;
+
+    try {
+        var base = (window.nahanConfig?.apiRoute || "sync").replace(/^\/+|\/+$/g, "");
+        await fetch("/" + base + "/api/nodes/delete", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: node.id, url: node.url || node.address })
+        });
+    } catch(err) {
+        console.warn("Delete request error:", err);
+    }
+
+    // حذف کامل از لیست محلی
+    panels.splice(idx, 1);
+    window.nahanConfig.linkedPanels = panels;
+
+    if (typeof saveConfig === "function") await saveConfig();
+    if (typeof renderTabNodes === "function") renderTabNodes();
+    if (typeof renderLinkedNodes === "function") renderLinkedNodes();
+    alert("نود به‌صورت کامل و ریشه‌ای حذف شد.");
+};
+</script>
+<script>
+window.editTabNodeKey = async function(idx) {
+    var p = (window.nahanConfig && window.nahanConfig.linkedPanels) || [];
+    var n = p[idx];
+    if (!n) { alert("Node not found"); return; }
+    var oldK = n.apiKey || n.api_key || "";
+    var k = prompt("Enter new node key for " + (n.name || n.url) + ":", oldK);
+    if (k === null) return;
+    k = k.trim();
+    if (!k) { alert("Key cannot be empty"); return; }
+    n.apiKey = k;
+    n.api_key = k;
+    try {
+        var b = (window.nahanConfig && window.nahanConfig.apiRoute) ? window.nahanConfig.apiRoute : "sync";
+        b = b.replace(/^\/+/, "").replace(/\/+$/, "");
+        await fetch("/" + b + "/api/nodes/update-key", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url: n.url || n.address, id: n.id, apiKey: k, node_key: k })
+        });
+    } catch(e) { console.warn(e); }
+    if (typeof saveConfig === "function") await saveConfig();
+    if (typeof renderTabNodes === "function") renderTabNodes();
+    if (typeof renderLinkedNodes === "function") renderLinkedNodes();
+    alert("Node key updated successfully");
+};
+</script>
   <!-- BUILD_ID: 1789922428.5659902 -->
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
@@ -12,7 +67,67 @@
       <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%236366f1'/><text x='50' y='62' font-size='40' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='bold'>N</text></svg>">
       <title>Mehr Gateway</title>
       <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;900&amp;display=swap" rel="stylesheet">
-      <script src="https://cdn.tailwindcss.com"></script>
+      <script src="https://cdn.tailwindcss.com">
+
+window.editTabNodeKey = async function(idx) {
+    const panels = window.nahanConfig?.linkedPanels || [];
+    const node = panels[idx];
+    if (!node) return;
+    const currentKey = node.apiKey || "";
+    const nodeName = node.name || node.url;
+    const newKey = prompt("کلید جدید تولیدشده توسط ویزارد را وارد کنید:\n" + nodeName, currentKey);
+    
+    if (newKey === null) return;
+    const trimmedKey = newKey.trim();
+    if (!trimmedKey || trimmedKey === currentKey) return;
+
+    // ۱. آپدیت مقدار در آبجکت محلی نود
+    node.apiKey = trimmedKey;
+    if (node.api_key !== undefined) node.api_key = trimmedKey;
+
+    // ۲. ارسال کلید جدید به دیتابیس D1 پنل
+    try {
+        const apiBase = (window.nahanConfig?.apiRoute || "sync").replace(/^\/+|\/+$/g, "");
+        const res = await fetch("/" + apiBase + "/api/nodes/update-key", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                url: node.url,
+                id: node.id,
+                apiKey: trimmedKey,
+                node_key: trimmedKey,
+                key: window.nahanConfig?.masterKey || sessionKey
+            })
+        });
+        const data = await res.json().catch(() => ({}));
+        console.log("DB Key update response:", data);
+    } catch(err) {
+        console.warn("DB update sync note:", err);
+    }
+
+    // ۳. ذخیره سازی کانفیگ و رندر مجدد تب‌ها
+    if (typeof renderTabNodes === "function") renderTabNodes();
+    if (typeof renderLinkedNodes === "function") renderLinkedNodes();
+    if (typeof saveConfig === "function") await saveConfig();
+    if (typeof showToast === "function") showToast("کلید جدید نود با موفقیت در دیتابیس و پنل ذخیره شد", "success");
+};
+
+window.editNodeKeyFromTab = function(idx) {
+    const panels = window.nahanConfig?.linkedPanels || [];
+    const node = panels[idx];
+    if (!node) return;
+    const currentKey = node.apiKey || "";
+    const newKey = prompt("کلید جدید تولیدشده توسط ویزارد را وارد کنید:\n" + (node.name || node.url), currentKey);
+    if (newKey !== null && newKey.trim() !== "" && newKey.trim() !== currentKey) {
+        node.apiKey = newKey.trim();
+        if (typeof renderLinkedNodes === "function") renderLinkedNodes();
+        if (typeof renderTabNodes === "function") renderTabNodes();
+        if (typeof saveConfig === "function") saveConfig();
+        if (typeof showToast === "function") showToast("کلید نود با موفقیت ذخیره شد", "success");
+    }
+};
+
+</script>
             <script>
           tailwind.config = {
     darkMode: 'class',
@@ -940,7 +1055,7 @@ html.dark select option {
                         <p id="tab-cluster-capacity-badge" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5" data-i18n="t4_cluster_loading">در حال بارگذاری وضعیت کلاستر...</p>
                     </div>
                     <div class="flex items-center gap-2">
-                        <button onclick="if(typeof autoCheckNodesHealth==='function'){autoCheckNodesHealth();showToast('در حال پایش و به‌روزرسانی وضعیت نودها...','info');}else if(typeof renderTabNodes==='function'){renderTabNodes();}" class="px-3 py-2 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800/90 dark:hover:bg-slate-700 text-slate-800 dark:text-white border border-slate-300 dark:border-slate-600 transition flex items-center gap-1.5 shadow-sm">
+                        <button onclick="window.triggerRefreshNodesAndStats(this)" class="px-3 py-2 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800/90 dark:hover:bg-slate-700 text-slate-800 dark:text-white border border-slate-300 dark:border-slate-600 transition flex items-center gap-1.5 shadow-sm">
                             <span data-i18n="t4_btn_refresh">🔄 به‌روزرسانی وضعیت</span>
                         </button>
                         <button onclick="showAddNodeModal()" type="button" class="px-4 py-2 text-xs font-bold rounded-xl bg-primary text-white hover:opacity-90 transition flex items-center gap-1.5 shadow-sm shadow-primary/20">
@@ -1070,12 +1185,12 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                                   </div>
                               </div>
                           </div>
-                          <!-- Section: Proxy Chain -->
+                          <!-- Section: Upstream VLESS -->
                           <div class="bg-[var(--color-surface)]  rounded-2xl border border-slate-200 dark:border-darkborder overflow-hidden" data-accordion="">
                               <button onclick="toggleAccordion(this)" class="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                                   <div class="flex items-center gap-3">
                                       <span class="text-lg">🔗</span>
-                                      <span class="text-sm font-bold text-slate-700 dark:text-white" data-i18n="adv_upstream_title">پروکسی چین (Proxy Chain)</span>
+                                      <span class="text-sm font-bold text-slate-700 dark:text-white" data-i18n="adv_upstream_title">Upstream VLESS</span>
                                       <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800" data-i18n="adv_upstream_badge">Sing-Box / Clash</span>
                                   </div>
                                   <svg class="w-4 h-4 text-slate-400 transform transition-transform duration-200 accordion-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
@@ -2340,7 +2455,7 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                     format_obfuscated: "Obfuscated (UTF-8 + XOR)",
                      btn_redeploy_force: "Force Redeploy / Switch Format",
                     adv_network_dns: "Network & DNS", adv_proxy_relay: "Proxy & Relay", adv_subscription: "Subscription",
-                    adv_upstream_title: "Proxy Chain", adv_upstream_badge: "Sing-Box / Clash",
+                    adv_upstream_title: "Upstream VLESS", adv_upstream_badge: "Sing-Box / Clash",
                     adv_upstream_desc1: "<strong>What does this do?</strong><br>It lets you use a free VLESS server (from sites like RaceVPN or SSHMax) so all your traffic goes through that server. Your exit IP becomes the server's IP.",
                     adv_upstream_desc2: "<strong>Why is it useful?</strong><br>Sometimes you need an IP from a specific country (like Germany or USA) but don't want to buy a server. This lets you use that country's IP for free.",
                     adv_upstream_desc3: "<strong>How to use?</strong><br>1. Get a VLESS link from one of the sites below<br>2. Paste it here<br>3. Click Save<br>4. Use the subscription link (Sing-Box or Clash format)",
@@ -2452,7 +2567,7 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                     format_obfuscated: "مبهم‌سازی شده (UTF-8 + XOR)",
                     btn_redeploy_force: "تفویض مجدد / تغییر قالب پنل",
                     adv_network_dns: "شبکه و DNS", adv_proxy_relay: "پروکسی و رله", adv_subscription: "اشتراک",
-                    adv_upstream_title: "پروکسی زنجیره‌ای (Proxy Chain)", adv_upstream_badge: "Sing-Box / Clash",
+                    adv_upstream_title: "آپ‌استریم VLESS", adv_upstream_badge: "Sing-Box / Clash",
                     adv_upstream_desc1: "<strong>این بخش چیکار میکنه؟</strong><br>یه سرور رایگان VLESS (مثلاً از سایت‌هایی مثل RaceVPN یا SSHMax) به پنل معرفی می‌کنی تا تمام ترافیکت از اون سوراخ رد بشه. یعنی IP خروجیت میشه IP اون سرور.",
                     adv_upstream_desc2: "<strong>چرا لازمه؟</strong><br>بعضی وقتا به IP یه کشور خاص (مثلاً آلمان یا آمریکا) نیاز داری ولی نمی‌خوای سرور بخری. با این بخش می‌تونی رایگان از IP اون کشور استفاده کنی.",
                     adv_upstream_desc3: "<strong>چطوری استفاده کنم؟</strong><br>۱. از یکی از سایت‌های زیر یه لینک VLESS بگیر<br>۲. لینک رو اینجا paste کن<br>۳. Save کن<br>۴. از لینک سابسکریپشن (فرمت Sing-Box یا Clash) استفاده کن",
@@ -2534,10 +2649,10 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
           const CHANGELOG_DATA = {
 
               "3.0.0": {
-                  headline: { en: "Proxy Chain, Redesigned User Management & Better UX", fa: "Proxy Chain، بازطراحی مدیریت کاربران و تجربه کاربری بهتر" },
+                  headline: { en: "Upstream VLESS, Redesigned User Management & Better UX", fa: "Upstream VLESS، بازطراحی مدیریت کاربران و تجربه کاربری بهتر" },
                   added: [
-                      { en: "پروکسی زنجیره‌ای (Proxy Chain) — you can now chain your panel with another VLESS server to bypass restrictions", fa: "قابلیت Proxy Chain / پروکسی زنجیره‌ای — حالا می‌تونی پنلت رو با یه سرور VLESS دیگه زنجیره کنی تا محدودیت‌ها دور زده بشه" },
-                      { en: "Proxy Chain section with simple explanations and links to free config providers", fa: "بخش Proxy Chain با توضیحات ساده و لینک سایت‌های دریافت کانفیگ رایگان" },
+                      { en: "Upstream VLESS / Proxy Chaining — you can now chain your panel with another VLESS server to bypass restrictions", fa: "قابلیت Upstream VLESS / پروکسی زنجیره‌ای — حالا می‌تونی پنلت رو با یه سرور VLESS دیگه زنجیره کنی تا محدودیت‌ها دور زده بشه" },
+                      { en: "Upstream VLESS section with simple explanations and links to free config providers", fa: "بخش Upstream VLESS با توضیحات ساده و لینک سایت‌های دریافت کانفیگ رایگان" },
                       { en: "v2rayN JSON subscription format (?flag=vjson) added to subscription page", fa: "فرمت سابسکریپشن v2rayN JSON (?flag=vjson) به صفحه سابسکریپشن اضافه شد" },
                       { en: "Custom Routing section now has bilingual descriptions (Farsi + English)", fa: "بخش مسیریابی سفارشی حالا توضیحات دوزبانه داره (فارسی + انگلیسی)" },
                       { en: "Custom confirm modal instead of browser's default alert/confirm dialogs", fa: "مودال تأیید سفارشی به جای دیالوگ‌های پیش‌فرض مرورگر" },
@@ -3083,7 +3198,8 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
             if(!container) return;
             container.innerHTML = '<p class="text-sm text-slate-400 text-center py-4">' + (i18n[lang]?.loading_logs || 'Loading logs...') + '</p>';
             try {
-                const res = await fetch(baseRoute + '/api/logs', { method: 'POST', body: JSON.stringify({ key: sessionKey }) });
+                const res = await fetch(baseRoute + '/api/logs', { method: 'POST', body: JSON.stringify({
+        key: sessionKey }) });
                 const data = await res.json();
                 if (data.success && data.logs) {
                     if (data.logs.length === 0) {
@@ -3375,7 +3491,23 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
               try { renderLinkedNodes(); if(typeof renderTabNodes === "function") renderTabNodes();  } catch(e){}
           }
 
-          function renderLinkedNodes() {
+          
+            window.editLinkedNodeKey = function(idx) {
+                const panels = window.nahanConfig?.linkedPanels || [];
+                const node = panels[idx];
+                if (!node) return;
+                const currentKey = node.apiKey || "";
+                const newKey = prompt("کلید احراز هویت جدید نود (API Key) را وارد کنید:\n" + node.url, currentKey);
+                if (newKey !== null && newKey.trim() !== "" && newKey.trim() !== currentKey) {
+                    node.apiKey = newKey.trim();
+                    renderLinkedNodes();
+                    if (typeof renderTabNodes === "function") renderTabNodes();
+                    if (typeof saveConfig === "function") saveConfig();
+                    if (typeof showToast === "function") showToast("کلید نود با موفقیت بروزرسانی شد", "success");
+                }
+            };
+
+function renderLinkedNodes() {
               const list = document.getElementById('linked-nodes-list');
               if (!list) return;
               const panels = (window.nahanConfig && Array.isArray(window.nahanConfig.linkedPanels)) ? window.nahanConfig.linkedPanels : [];
@@ -3404,7 +3536,10 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                           </div>
                       </div>
                       <div class="flex items-center gap-1">
-                          <button onclick="fetchClusterStats()" class="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors shrink-0 text-slate-400" title="Ping Test">
+                          <button onclick="editLinkedNodeKey(${i})" class="p-1.5 hover:bg-amber-100 dark:hover:bg-amber-900/30 rounded-lg transition-colors shrink-0 text-amber-500" title="ویرایش کلید نود">
+                               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                           </button>
+                           <button onclick="fetchClusterStats()" class="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors shrink-0 text-slate-400" title="Ping Test">
                               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
                           </button>
                           <button onclick="removeLinkedNode(${i})" class="p-1.5 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors shrink-0" title="Remove">
@@ -4033,7 +4168,7 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
 
                   const totalLabel = lang === 'fa' ? 'کل:' : 'Total:';
                   const dailyLabel = lang === 'fa' ? 'روزانه:' : 'Daily:';
-                  const rLabel = lang === 'fa' ? 'درخواست' : 'r';
+                  const rLabel = 'GB';
 
                   let linkTitle = lang === 'fa' ? 'کپی لینک ساب' : 'Copy Subscription Link';
                   let pauseTitle = u.isPaused ? (lang === 'fa' ? 'فعال‌سازی کاربر' : 'Resume User') : (lang === 'fa' ? 'توقف کاربر' : 'Pause User');
@@ -5402,13 +5537,22 @@ function buildModeCheckboxes(wrapId, userMode) {
         }
     };
 
-    window.toggleNodeUpstream = function (idx, enabled) {
-        const cfg = (typeof getActivePanelConfig === "function") ? getActivePanelConfig() : (window.nahanConfig || {});
-        if (cfg.linkedPanels && cfg.linkedPanels[idx]) {
-            cfg.linkedPanels[idx].useUpstream = !!enabled;
-            if (typeof showToast === "function") showToast(enabled ? "هدایت نود به Upstream فعال شد." : "هدایت نود به Upstream غیرفعال شد.", "info");
-        }
-    };
+    window.toggleNodeUpstream = async function (idx, enabled) {
+         const cfg = (typeof getActivePanelConfig === "function") ? getActivePanelConfig() : (window.nahanConfig || {});
+         if (cfg.linkedPanels && cfg.linkedPanels[idx]) {
+             cfg.linkedPanels[idx].useUpstream = !!enabled;
+             if (typeof doSaveDirectly === "function") {
+                 await doSaveDirectly();
+             } else if (typeof doSave === "function") {
+                 await doSave();
+             } else if (typeof saveConfig === "function") {
+                 await saveConfig();
+             }
+             if (typeof showToast === "function") {
+                 showToast(enabled ? "هدایت نود به Upstream فعال و ذخیره شد." : "هدایت نود به Upstream غیرفعال شد.", "success");
+             }
+         }
+     };
 
     window.removeLinkedNode = function (idx) {
         if (!confirm("آیا از حذف این نود اطمینان دارید؟")) return;
@@ -5486,7 +5630,17 @@ function buildModeCheckboxes(wrapId, userMode) {
 
     window.autoCheckNodesHealth = async function () {
         const cfg = (typeof getActivePanelConfig === "function") ? getActivePanelConfig() : (window.nahanConfig || {});
-        const panels = Array.isArray(cfg.linkedPanels) ? cfg.linkedPanels : [];
+        let panels = Array.isArray(cfg.linkedPanels) ? [...cfg.linkedPanels] : [];
+          // اگر آرایه لوکال خالی بود یا نودهای دیتابیس بیشتر بودند، مستقیماً از نودهای دیتابیس استفاده کن
+          if (window.clusterNodeStats && window.clusterNodeStats.nodes) {
+              const dbHosts = Object.keys(window.clusterNodeStats.nodes);
+              dbHosts.forEach(h => {
+                  const exists = panels.some(p => ((typeof p === "object" ? p.url : p) || "").toLowerCase().includes(h.toLowerCase()));
+                  if (!exists) {
+                      panels.push({ id: h, name: h, url: "https://" + h, apiKey: "" });
+                  }
+              });
+          }
         for (let p of panels) {
             const rawUrl = (typeof p === "object" ? p.url : p) || "";
             const host = cleanHost(rawUrl);
@@ -5503,46 +5657,63 @@ function buildModeCheckboxes(wrapId, userMode) {
     };
 
     window.syncNodesTrafficStats = async function() {
-        try {
-            const apiBase = (window.nahanConfig?.apiRoute || "sync").replace(/^\/+|\/+$/g, "");
-            const sRes = await fetch("/" + apiBase + "/api/stats");
-            if (sRes.ok) {
-                const sData = await sRes.json();
-                window.clusterNodeStats = window.clusterNodeStats || { nodes: {} };
-                const t = sData?.stats?.traffic || {};
-                window.clusterNodeStats.masterTotalBytes = Number(t.totalGB || 0) * 1073741824;
-                window.clusterNodeStats.masterTodayBytes = Number(t.dailyGB || 0) * 1073741824;
-                window.clusterNodeStats.masterDailyReqs = Number(t.dailyRequests ?? t.totalRequests ?? 0);
-            }
-        } catch(e) {}
-        try {
-            const apiBase = (window.nahanConfig?.apiRoute || "sync").replace(/^\/+|\/+$/g, "");
-            const res = await fetch("/" + apiBase + "/api/nodes");
-            if (res.ok) {
-                const data = await res.json();
-                if (data.success && Array.isArray(data.nodes)) {
-                    window.clusterNodeStats = window.clusterNodeStats || { nodes: {} };
-                    window.clusterNodeStats.nodes = window.clusterNodeStats.nodes || {};
-                    data.nodes.forEach(n => {
-                        const h = (n.url || n.address || "").replace(/^https?:\/\//, "").split("/")[0].trim().toLowerCase();
-                        if (!h) return;
-                        window.clusterNodeStats.nodes[h] = {
-                            ...(window.clusterNodeStats.nodes[h] || {}),
-                            total_bytes: Number(n.total_bytes || 0),
-                            today_bytes: Number(n.total_bytes || 0),
-                            daily_requests: Number(n.daily_requests || 0),
-                            country: n.country || "US",
-                            flag: n.flag || "",
-                            is_online: n.is_online === true,
-                            online: n.is_online === true
-                        };
-                    });
-                }
-            }
-        } catch(e) {}
-    };
+         try {
+             const apiBase = (window.nahanConfig?.apiRoute || "sync").replace(/^\/+|\/+$/g, "");
+             const sRes = await fetch("/" + apiBase + "/api/stats");
+             if (sRes.ok) {
+                 const sData = await sRes.json();
+                 window.clusterNodeStats = window.clusterNodeStats || { nodes: {}, users: {} };
+                 const t = sData?.stats?.traffic || {};
+                 window.clusterNodeStats.masterTotalBytes = Number(t.totalBytes || (Number(t.totalGB || 0) * 1073741824));
+                 window.clusterNodeStats.masterTodayBytes = Number(t.dailyBytes || (Number(t.dailyGB || 0) * 1073741824));
+                 window.clusterNodeStats.masterDailyReqs = Number(t.dailyRequests ?? t.totalRequests ?? 0);
 
-    window.renderTabNodes = function () {
+                 // سینک مصرف تک‌تک کاربران در حافظه داشبورد
+                 window.nahanUsage = window.nahanUsage || {};
+                 if (sData?.stats?.usage) {
+                     for (const uid in sData.stats.usage) {
+                         const uInfo = sData.stats.usage[uid];
+                         window.nahanUsage[uid] = {
+                             bytes: Number(uInfo.bytes || 0),
+                             dBytes: Number(uInfo.dBytes || 0),
+                             reqs: Math.round(Number(uInfo.bytes || 0) / 178956),
+                             dReqs: Math.round(Number(uInfo.dBytes || 0) / 178956),
+                             lastDay: new Date().toISOString().split('T')[0]
+                         };
+                         window.clusterNodeStats.users[uid] = Number(uInfo.bytes || 0);
+                     }
+                 }
+                 if (typeof renderUsersTable === "function") renderUsersTable();
+             }
+         } catch(e) {}
+         try {
+             const apiBase = (window.nahanConfig?.apiRoute || "sync").replace(/^\/+|\/+$/g, "");
+             const res = await fetch("/" + apiBase + "/api/nodes");
+             if (res.ok) {
+                 const data = await res.json();
+                 if (data.success && Array.isArray(data.nodes)) {
+                     window.clusterNodeStats = window.clusterNodeStats || { nodes: {}, users: {} };
+                     window.clusterNodeStats.nodes = window.clusterNodeStats.nodes || {};
+                     data.nodes.forEach(n => {
+                         const h = (n.url || n.address || "").replace(/^https?:\/\//, "").split("/")[0].trim().toLowerCase();
+                         if (!h) return;
+                         window.clusterNodeStats.nodes[h] = {
+                             ...(window.clusterNodeStats.nodes[h] || {}),
+                             total_bytes: Number(n.total_bytes || 0),
+                             today_bytes: Number(n.today_bytes || n.total_bytes || 0),
+                             daily_requests: Number(n.daily_requests || 0),
+                             country: n.country || "US",
+                             flag: n.flag || "",
+                             is_online: n.is_online === true,
+                             online: n.is_online === true
+                         };
+                     });
+                     if (typeof window.renderTabNodes === "function") window.renderTabNodes();
+                 }
+             }
+         } catch(e) {}
+     };
+window.renderTabNodes = function () {
         const isEn = (localStorage.getItem("nahan_lang") === "en" || document.documentElement.lang === "en");
         const grid = document.getElementById("tab-nodes-grid");
         const badge = document.getElementById("tab-cluster-capacity-badge");
@@ -5655,7 +5826,12 @@ function buildModeCheckboxes(wrapId, userMode) {
 
                         <div class="text-xs font-mono text-slate-700 dark:text-slate-200 break-all bg-slate-50 dark:bg-darkcard/80 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder flex items-center justify-between">
                             <span>${host}</span>
-                            ${apiKey ? `<span class="text-[10px] text-slate-400 font-mono" title="API Key: ${apiKey}">🔑 ${apiKey.substring(0, 8)}...</span>` : ""}
+                            <div class="flex items-center gap-1.5">
+                                 ${apiKey ? `<span class="text-[10px] text-slate-400 font-mono" title="API Key: ${apiKey}">🔑 ${apiKey.substring(0, 8)}...</span>` : `<span class="text-[10px] text-amber-500 font-mono">بدون کلید</span>`}
+                                 <button type="button" onclick="editTabNodeKey(${idx})" class="p-1 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-500 rounded transition-colors" title="ویرایش کلید نود">
+                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                                 </button>
+                             </div>
                         </div>
 
                         <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
@@ -5683,14 +5859,8 @@ function buildModeCheckboxes(wrapId, userMode) {
                         </div>
 
                         <div class="mt-2 pt-2 border-t border-slate-100 dark:border-darkborder/60 space-y-2 text-xs">
-                            <div class="flex items-center justify-between gap-2">
-                                <span class="text-slate-400 text-[11px] whitespace-nowrap">پروکسی IP:</span>
-                                <input type="text" value="${p.proxyIp || ""}" placeholder="104.18.2.1"
-                                    onchange="updateNodeProp(${idx}, 'proxyIp', this.value.trim())"
-                                    class="w-40 px-2 py-1 text-[11px] font-mono rounded-lg bg-slate-50 dark:bg-darkcard border border-slate-200 dark:border-darkborder text-slate-800 dark:text-white focus:outline-none focus:border-primary text-center">
-                            </div>
                             <label class="flex items-center justify-between cursor-pointer text-slate-700 dark:text-slate-300">
-                                <span class="text-[11px] font-medium">زنجیره پروکسی (Chain 🔗)</span>
+                                <span class="text-[11px] font-medium">هدایت به Upstream (🔗)</span>
                                 <input type="checkbox" ${p.useUpstream ? "checked" : ""}
                                     onchange="toggleNodeUpstream(${idx}, this.checked)"
                                     class="w-4 h-4 text-primary rounded border-slate-300 dark:border-darkborder cursor-pointer">
@@ -5702,7 +5872,10 @@ function buildModeCheckboxes(wrapId, userMode) {
                         <button id="btn-ping-${idx}" onclick="testSingleNode('${host}', 'btn-ping-${idx}')" class="flex-1 py-2 px-3 text-xs font-bold rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 dark:bg-primary/20 dark:text-primary transition flex items-center justify-center gap-1.5 shadow-sm">
                             <span>تست پینگ</span>
                         </button>
-                        <button onclick="removeLinkedNode(${idx})" class="py-2 px-3 text-xs font-bold rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/20 transition flex items-center justify-center gap-1 shadow-sm">
+                        <button onclick="assignNodeToAllUsers('${host}')" title="افزودن به همه کاربران" class="py-2 px-2.5 text-xs font-bold rounded-xl bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-500/20 transition flex items-center justify-center gap-1 shadow-sm">
+                            <span>👥 افزودن به همه</span>
+                        </button>
+                        <button onclick="purgeLinkedNode('${host}',${idx})" title="حذف کامل" class="py-2 px-3 text-xs font-bold rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/20 transition flex items-center justify-center gap-1 shadow-sm">
                             <span>حذف</span>
                         </button>
                     </div>
@@ -5724,6 +5897,171 @@ function buildModeCheckboxes(wrapId, userMode) {
         setTimeout(window.initServersTab, 300);
     }
 })();
+
+    // تابع استعلام زنده آمار و نودها بدون نیاز به رفرش صفحه
+    window.triggerRefreshNodesAndStats = async function(btnEl) {
+        if (btnEl) {
+            btnEl.disabled = true;
+            btnEl.classList.add("opacity-50", "animate-pulse");
+        }
+        if (typeof showToast === "function") showToast("در حال دریافت آمار زنده از کلادفلر و دیتابیس...", "info");
+        try {
+            await fetch("/api/nodes/force-refresh-all", { method: "POST" }).catch(() => {});
+            const res = await fetch("/api/nodes");
+            if (res.ok) {
+                const data = await res.json();
+                if (data.success && Array.isArray(data.nodes)) {
+                    window.clusterNodeStats = window.clusterNodeStats || { nodes: {} };
+                    window.clusterNodeStats.nodes = window.clusterNodeStats.nodes || {};
+                    const cfg = (typeof getActivePanelConfig === "function") ? getActivePanelConfig() : (window.nahanConfig || {});
+                    cfg.linkedPanels = cfg.linkedPanels || [];
+                    data.nodes.forEach(n => {
+                        const h = (n.url || n.address || "").replace(/^https?:\/\//, "").split("/")[0].trim().toLowerCase();
+                        if (!h) return;
+                        window.clusterNodeStats.nodes[h] = {
+                            ...(window.clusterNodeStats.nodes[h] || {}),
+                            total_bytes: Number(n.total_bytes || 0),
+                            today_bytes: Number(n.today_bytes || 0),
+                            daily_requests: Number(n.daily_requests || 0),
+                            country: n.country || "US",
+                            flag: n.flag || "",
+                            is_online: n.is_online === true,
+                            online: n.is_online === true
+                        };
+                        const exists = cfg.linkedPanels.some(p => ((typeof p === "object" ? p.url : p) || "").toLowerCase().includes(h));
+                        if (!exists) {
+                            cfg.linkedPanels.push({ id: n.id || h, name: n.name || h, url: n.url || ("https://" + h), apiKey: n.api_key || "" });
+                        }
+                    });
+                }
+            }
+            if (typeof syncNodesTrafficStats === "function") await syncNodesTrafficStats();
+            if (typeof autoCheckNodesHealth === "function") await autoCheckNodesHealth();
+            if (typeof renderTabNodes === "function") renderTabNodes();
+            if (typeof showToast === "function") showToast("آمار و وضعیت نودها با موفقیت به‌روزرسانی شد.", "success");
+        } catch(e) {
+            if (typeof renderTabNodes === "function") renderTabNodes();
+        } finally {
+            if (btnEl) {
+                btnEl.disabled = false;
+                btnEl.classList.remove("opacity-50", "animate-pulse");
+            }
+        }
+    };
+
+
+    
+
+
+
+    window.assignNodeToAllUsers = async function(nodeHost) {
+        if (!nodeHost) return;
+        // استخراج هاست خالص مطابق منطق getGlobalNodeList
+        let cleanHost = String(nodeHost).trim()
+            .replace(/^[a-zA-Z]+:\/\//, '')
+            .split('/')[0]
+            .split('@').pop()
+            .split(':')[0]
+            .trim();
+
+        if (!confirm(`آیا مطمئن هستید که می‌خواهید سرور "${cleanHost}" را به همه کاربران اختصاص دهید؟`)) return;
+
+        let cfg = (typeof getActivePanelConfig === "function") ? getActivePanelConfig() : (window.nahanConfig || {});
+        if (!cfg.users || !Array.isArray(cfg.users)) {
+            alert("لیست کاربران در تنظیمات یافت نشد.");
+            return;
+        }
+
+        let updatedCount = 0;
+        cfg.users.forEach(u => {
+            let currentList = (u.userNodes || "").split(/[,\r\n;]+/).map(s => s.trim()).filter(Boolean);
+            if (!currentList.includes(cleanHost)) {
+                currentList.push(cleanHost);
+                u.userNodes = currentList.join(',');
+                updatedCount++;
+            }
+        });
+
+        // ذخیره سراسری در کانفیگ پنل و دیتابیس
+        if (typeof doSaveDirectly === "function") {
+            await doSaveDirectly();
+        } else if (typeof doSave === "function") {
+            await doSave();
+        } else if (typeof saveConfig === "function") {
+            await saveConfig();
+        }
+
+        if (typeof showToast === "function") {
+            showToast(`نود به ${updatedCount} کاربر اختصاص یافت و ذخیره شد.`, "success");
+        } else {
+            alert(`نود به ${updatedCount} کاربر اختصاص یافت.`);
+        }
+    };
+
+    window.purgeLinkedNode = async function(nodeHost, idx) {
+        if (!confirm(`آیا از حذف کامل سرور "${nodeHost}" اطمینان دارید؟ این نود از دیتابیس و دسترسی تمام کاربران حذف می‌شود.`)) return;
+
+        let cfg = (typeof getActivePanelConfig === "function") ? getActivePanelConfig() : (window.nahanConfig || {});
+        let targetNode = (cfg.linkedPanels && cfg.linkedPanels[idx]) ? cfg.linkedPanels[idx] : null;
+        let cleanHost = String(nodeHost || "").trim().replace(/^[a-zA-Z]+:\/\//, '').split('/')[0].split(':')[0].trim();
+        let nodeId = targetNode?.id || (targetNode?.url ? targetNode.url.replace(/^https?:\/\//, "").split("/")[0].split(".")[0] : cleanHost);
+
+        // ۱. ارسال درخواست حذف به دیتابیس D1 ورکر
+        try {
+            const apiBase = (cfg.apiRoute || "sync").replace(/^\/+|\/+$/g, "");
+            await fetch(`/${apiBase}/api/nodes?id=${encodeURIComponent(nodeId)}&host=${encodeURIComponent(cleanHost)}`, {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ id: nodeId, url: targetNode?.url, host: cleanHost })
+            });
+        } catch(e) {
+            console.error("خطا در ارسال حذف به دیتابیس:", e);
+        }
+
+        // ۲. حذف نود از تمام کاربران
+        if (Array.isArray(cfg.users)) {
+            cfg.users.forEach(u => {
+                if (u.userNodes) {
+                    let list = u.userNodes.split(/[,\r\n;]+/).map(s => s.trim()).filter(Boolean);
+                    list = list.filter(n => n !== cleanHost && !n.includes(cleanHost));
+                    u.userNodes = list.join(',');
+                }
+            });
+        }
+
+        // ۳. حذف از آرایه نودها
+        if (Array.isArray(cfg.linkedPanels)) {
+            cfg.linkedPanels.splice(idx, 1);
+        }
+
+        // ۴. ذخیره تغییرات
+        if (typeof doSaveDirectly === "function") {
+            await doSaveDirectly();
+        } else if (typeof doSave === "function") {
+            await doSave();
+        } else if (typeof saveConfig === "function") {
+            await saveConfig();
+        }
+
+        if (typeof renderLinkedNodes === "function") renderLinkedNodes();
+        if (typeof window.renderTabNodes === "function") window.renderTabNodes();
+        if (typeof showToast === "function") showToast("نود با موفقیت از دیتابیس و کاربران پاک شد.", "success");
+    };
+
 </script>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  // بارگذاری بلافاصله اطلاعات هنگام باز شدن پنل
+  if (typeof fetchNodes === "function") fetchNodes();
+  if (typeof loadDashboardStats === "function") loadDashboardStats();
+
+  // بروزرسانی دوره‌ای داخل مرورگر در زمان باز ماندن تب
+  setInterval(() => {
+    if (typeof fetchNodes === "function") fetchNodes();
+  }, 30000);
+});
+</script>
+
 </body>
 </html>

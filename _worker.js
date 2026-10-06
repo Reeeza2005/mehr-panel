@@ -729,8 +729,8 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
                 } else {
                     targetMode = (userRecord.userMode || "both").toLowerCase();
                 }
-                const allowVless = targetMode === "alpha" || targetMode === "both";
-                const allowTrojan = targetMode === "beta" || targetMode === "both";
+                const allowVless = targetMode !== "beta";
+                const allowTrojan = targetMode === "beta";
 
                 let cfgIndex = 0;
             

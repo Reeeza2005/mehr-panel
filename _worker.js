@@ -362,6 +362,18 @@ export default {
   },
 
     async fetch(request, env, ctx) {
+        const _earlyUrl = new URL(request.url);
+        let _p = _earlyUrl.pathname;
+        if (_p.endsWith("/") && _p.length > 1) _p = _p.slice(0, -1);
+        if (_p === "/sync/dash" || _p === "/dash" || _p.endsWith("/dash")) {
+            let html = HTML_CONTENT
+                .replace(/__CURRENT_VERSION__/g, CURRENT_VERSION)
+                .replace(/__HAS_DB_WARNING__/g, "");
+            return new Response(html, {
+                headers: { "Content-Type": "text/html; charset=utf-8" },
+            });
+        }
+
         await loadConfig(env);
         const url = new URL(request.url);
         let reqPath = url.pathname;
@@ -1261,21 +1273,32 @@ if(env.IOT_DB){try{const{results:nR}=await env.IOT_DB.prepare("SELECT * FROM nod
 
         if (reqPath === `${routeBase}/api/nodes` || reqPath.endsWith("/api/nodes")) {
             if (request.method === "GET") {
-                const { results } = await env.IOT_DB.prepare(`
-                    SELECT n.*, 
-                           COALESCE(SUM(nt.bytes_uploaded + nt.bytes_downloaded), 0) AS total_bytes
-                    FROM nodes n
-                    LEFT JOIN node_traffic nt ON (nt.node_id = n.id OR nt.node_id LIKE '%' || n.id || '%')
-                    GROUP BY n.id
-                    ORDER BY n.created_at DESC
-                `).all();
-                const computedNodes = (results || []).map(n => ({
-                    ...n,
-                    address: n.address || n.url,
-                    total_bytes: Number(n.total_bytes || 0),
-                    is_online: n.last_seen > 0 && (Math.floor(Date.now() / 1000) - n.last_seen) < 300 && n.status === "active", country: (n.country && n.country.length === 2 ? (n.country.toUpperCase()) : "US"), flag: getCountryFlag(n.country || "US")
-                }));
-                return jsonResponse({ success: true, nodes: computedNodes });
+                try {
+                    if (!env.IOT_DB) return jsonResponse({ success: true, nodes: [] });
+                    const { results } = await env.IOT_DB.prepare(`
+                        SELECT n.*, 
+                               COALESCE(SUM(nt.bytes_uploaded + nt.bytes_downloaded), 0) AS total_bytes
+                        FROM nodes n
+                        LEFT JOIN node_traffic nt ON (nt.node_id = n.id OR nt.node_id LIKE '%' || n.id || '%')
+                        GROUP BY n.id
+                        ORDER BY n.created_at DESC
+                    `).all();
+                    const computedNodes = (results || []).map(n => {
+                        let flag = "🌐";
+                        try { if (typeof getCountryFlag === "function") flag = getCountryFlag(n.country || "US"); } catch(_) {}
+                        return {
+                            ...n,
+                            address: n.address || n.url,
+                            total_bytes: Number(n.total_bytes || 0),
+                            is_online: n.last_seen > 0 && (Math.floor(Date.now() / 1000) - n.last_seen) < 300 && n.status === "active",
+                            country: (n.country && n.country.length === 2 ? (n.country.toUpperCase()) : "US"),
+                            flag: flag
+                        };
+                    });
+                    return jsonResponse({ success: true, nodes: computedNodes });
+                } catch (e) {
+                    return jsonResponse({ success: true, nodes: [], error: e.message });
+                }
             }
                         if (request.method === "PUT") {
                 try {

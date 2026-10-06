@@ -12,63 +12,7 @@
       <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%236366f1'/><text x='50' y='62' font-size='40' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='bold'>N</text></svg>">
       <title>Mehr Gateway</title>
       <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;900&amp;display=swap" rel="stylesheet">
-      <script src="https://cdn.tailwindcss.com">
-
-window.editNodeKeyFromTab = function(idx) {
-    const panels = window.nahanConfig?.linkedPanels || [];
-    const node = panels[idx];
-    if (!node) return;
-    const currentKey = node.apiKey || "";
-    const newKey = prompt("کلید جدید تولیدشده توسط ویزارد را وارد کنید:\n" + (node.name || node.url), currentKey);
-    if (newKey !== null && newKey.trim() !== "" && newKey.trim() !== currentKey) {
-        node.apiKey = newKey.trim();
-        if (typeof renderLinkedNodes === "function") renderLinkedNodes();
-        if (typeof renderTabNodes === "function") renderTabNodes();
-        if (typeof saveConfig === "function") saveConfig();
-        if (typeof showToast === "function") showToast("کلید نود با موفقیت ذخیره شد", "success");
-    }
-};
-
-
-window.editTabNodeKey = async function(idx) {
-    const panels = window.nahanConfig?.linkedPanels || [];
-    const node = panels[idx];
-    if (!node) return;
-    const currentKey = node.apiKey || "";
-    const nodeName = node.name || node.url;
-    const newKey = prompt("کلید جدید تولیدشده توسط ویزارد را وارد کنید:\n" + nodeName, currentKey);
-    
-    if (newKey === null) return;
-    const trimmedKey = newKey.trim();
-    if (!trimmedKey || trimmedKey === currentKey) return;
-
-    node.apiKey = trimmedKey;
-    if (node.api_key !== undefined) node.api_key = trimmedKey;
-
-    try {
-        const apiBase = (window.nahanConfig?.apiRoute || "sync").replace(/^\/+|\/+$/g, "");
-        await fetch("/" + apiBase + "/api/nodes/update-key", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                url: node.url,
-                id: node.id,
-                apiKey: trimmedKey,
-                node_key: trimmedKey,
-                key: window.nahanConfig?.masterKey || sessionKey
-            })
-        });
-    } catch(err) {
-        console.warn("DB update sync:", err);
-    }
-
-    if (typeof renderTabNodes === "function") renderTabNodes();
-    if (typeof renderLinkedNodes === "function") renderLinkedNodes();
-    if (typeof saveConfig === "function") await saveConfig();
-    if (typeof showToast === "function") showToast("کلید جدید نود با موفقیت در دیتابیس و پنل ذخیره شد", "success");
-};
-
-</script>
+      <script src="https://cdn.tailwindcss.com"></script>
             <script>
           tailwind.config = {
     darkMode: 'class',
@@ -996,7 +940,7 @@ html.dark select option {
                         <p id="tab-cluster-capacity-badge" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5" data-i18n="t4_cluster_loading">در حال بارگذاری وضعیت کلاستر...</p>
                     </div>
                     <div class="flex items-center gap-2">
-                        <button onclick="window.triggerRefreshNodesAndStats(this)" class="px-3 py-2 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800/90 dark:hover:bg-slate-700 text-slate-800 dark:text-white border border-slate-300 dark:border-slate-600 transition flex items-center gap-1.5 shadow-sm">
+                        <button onclick="if(typeof autoCheckNodesHealth==='function'){autoCheckNodesHealth();showToast('در حال پایش و به‌روزرسانی وضعیت نودها...','info');}else if(typeof renderTabNodes==='function'){renderTabNodes();}" class="px-3 py-2 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800/90 dark:hover:bg-slate-700 text-slate-800 dark:text-white border border-slate-300 dark:border-slate-600 transition flex items-center gap-1.5 shadow-sm">
                             <span data-i18n="t4_btn_refresh">🔄 به‌روزرسانی وضعیت</span>
                         </button>
                         <button onclick="showAddNodeModal()" type="button" class="px-4 py-2 text-xs font-bold rounded-xl bg-primary text-white hover:opacity-90 transition flex items-center gap-1.5 shadow-sm shadow-primary/20">
@@ -3139,8 +3083,7 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
             if(!container) return;
             container.innerHTML = '<p class="text-sm text-slate-400 text-center py-4">' + (i18n[lang]?.loading_logs || 'Loading logs...') + '</p>';
             try {
-                const res = await fetch(baseRoute + '/api/logs', { method: 'POST', body: JSON.stringify({
-        key: sessionKey }) });
+                const res = await fetch(baseRoute + '/api/logs', { method: 'POST', body: JSON.stringify({ key: sessionKey }) });
                 const data = await res.json();
                 if (data.success && data.logs) {
                     if (data.logs.length === 0) {
@@ -3432,23 +3375,7 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
               try { renderLinkedNodes(); if(typeof renderTabNodes === "function") renderTabNodes();  } catch(e){}
           }
 
-          
-            window.editLinkedNodeKey = function(idx) {
-                const panels = window.nahanConfig?.linkedPanels || [];
-                const node = panels[idx];
-                if (!node) return;
-                const currentKey = node.apiKey || "";
-                const newKey = prompt("کلید احراز هویت جدید نود (API Key) را وارد کنید:\n" + node.url, currentKey);
-                if (newKey !== null && newKey.trim() !== "" && newKey.trim() !== currentKey) {
-                    node.apiKey = newKey.trim();
-                    renderLinkedNodes();
-                    if (typeof renderTabNodes === "function") renderTabNodes();
-                    if (typeof saveConfig === "function") saveConfig();
-                    if (typeof showToast === "function") showToast("کلید نود با موفقیت بروزرسانی شد", "success");
-                }
-            };
-
-function renderLinkedNodes() {
+          function renderLinkedNodes() {
               const list = document.getElementById('linked-nodes-list');
               if (!list) return;
               const panels = (window.nahanConfig && Array.isArray(window.nahanConfig.linkedPanels)) ? window.nahanConfig.linkedPanels : [];
@@ -3477,10 +3404,7 @@ function renderLinkedNodes() {
                           </div>
                       </div>
                       <div class="flex items-center gap-1">
-                          <button onclick="editLinkedNodeKey(${i})" class="p-1.5 hover:bg-amber-100 dark:hover:bg-amber-900/30 rounded-lg transition-colors shrink-0 text-amber-500" title="ویرایش کلید نود">
-                               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
-                           </button>
-                           <button onclick="fetchClusterStats()" class="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors shrink-0 text-slate-400" title="Ping Test">
+                          <button onclick="fetchClusterStats()" class="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors shrink-0 text-slate-400" title="Ping Test">
                               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
                           </button>
                           <button onclick="removeLinkedNode(${i})" class="p-1.5 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors shrink-0" title="Remove">
@@ -4109,7 +4033,7 @@ function renderLinkedNodes() {
 
                   const totalLabel = lang === 'fa' ? 'کل:' : 'Total:';
                   const dailyLabel = lang === 'fa' ? 'روزانه:' : 'Daily:';
-                  const rLabel = 'GB';
+                  const rLabel = lang === 'fa' ? 'درخواست' : 'r';
 
                   let linkTitle = lang === 'fa' ? 'کپی لینک ساب' : 'Copy Subscription Link';
                   let pauseTitle = u.isPaused ? (lang === 'fa' ? 'فعال‌سازی کاربر' : 'Resume User') : (lang === 'fa' ? 'توقف کاربر' : 'Pause User');
@@ -5478,22 +5402,13 @@ function buildModeCheckboxes(wrapId, userMode) {
         }
     };
 
-    window.toggleNodeUpstream = async function (idx, enabled) {
-         const cfg = (typeof getActivePanelConfig === "function") ? getActivePanelConfig() : (window.nahanConfig || {});
-         if (cfg.linkedPanels && cfg.linkedPanels[idx]) {
-             cfg.linkedPanels[idx].useUpstream = !!enabled;
-             if (typeof doSaveDirectly === "function") {
-                 await doSaveDirectly();
-             } else if (typeof doSave === "function") {
-                 await doSave();
-             } else if (typeof saveConfig === "function") {
-                 await saveConfig();
-             }
-             if (typeof showToast === "function") {
-                 showToast(enabled ? "هدایت نود به Upstream فعال و ذخیره شد." : "هدایت نود به Upstream غیرفعال شد.", "success");
-             }
-         }
-     };
+    window.toggleNodeUpstream = function (idx, enabled) {
+        const cfg = (typeof getActivePanelConfig === "function") ? getActivePanelConfig() : (window.nahanConfig || {});
+        if (cfg.linkedPanels && cfg.linkedPanels[idx]) {
+            cfg.linkedPanels[idx].useUpstream = !!enabled;
+            if (typeof showToast === "function") showToast(enabled ? "هدایت نود به Upstream فعال شد." : "هدایت نود به Upstream غیرفعال شد.", "info");
+        }
+    };
 
     window.removeLinkedNode = function (idx) {
         if (!confirm("آیا از حذف این نود اطمینان دارید؟")) return;
@@ -5571,17 +5486,7 @@ function buildModeCheckboxes(wrapId, userMode) {
 
     window.autoCheckNodesHealth = async function () {
         const cfg = (typeof getActivePanelConfig === "function") ? getActivePanelConfig() : (window.nahanConfig || {});
-        let panels = Array.isArray(cfg.linkedPanels) ? [...cfg.linkedPanels] : [];
-          // اگر آرایه لوکال خالی بود یا نودهای دیتابیس بیشتر بودند، مستقیماً از نودهای دیتابیس استفاده کن
-          if (window.clusterNodeStats && window.clusterNodeStats.nodes) {
-              const dbHosts = Object.keys(window.clusterNodeStats.nodes);
-              dbHosts.forEach(h => {
-                  const exists = panels.some(p => ((typeof p === "object" ? p.url : p) || "").toLowerCase().includes(h.toLowerCase()));
-                  if (!exists) {
-                      panels.push({ id: h, name: h, url: "https://" + h, apiKey: "" });
-                  }
-              });
-          }
+        const panels = Array.isArray(cfg.linkedPanels) ? cfg.linkedPanels : [];
         for (let p of panels) {
             const rawUrl = (typeof p === "object" ? p.url : p) || "";
             const host = cleanHost(rawUrl);
@@ -5598,63 +5503,46 @@ function buildModeCheckboxes(wrapId, userMode) {
     };
 
     window.syncNodesTrafficStats = async function() {
-         try {
-             const apiBase = (window.nahanConfig?.apiRoute || "sync").replace(/^\/+|\/+$/g, "");
-             const sRes = await fetch("/" + apiBase + "/api/stats");
-             if (sRes.ok) {
-                 const sData = await sRes.json();
-                 window.clusterNodeStats = window.clusterNodeStats || { nodes: {}, users: {} };
-                 const t = sData?.stats?.traffic || {};
-                 window.clusterNodeStats.masterTotalBytes = Number(t.totalBytes || (Number(t.totalGB || 0) * 1073741824));
-                 window.clusterNodeStats.masterTodayBytes = Number(t.dailyBytes || (Number(t.dailyGB || 0) * 1073741824));
-                 window.clusterNodeStats.masterDailyReqs = Number(t.dailyRequests ?? t.totalRequests ?? 0);
+        try {
+            const apiBase = (window.nahanConfig?.apiRoute || "sync").replace(/^\/+|\/+$/g, "");
+            const sRes = await fetch("/" + apiBase + "/api/stats");
+            if (sRes.ok) {
+                const sData = await sRes.json();
+                window.clusterNodeStats = window.clusterNodeStats || { nodes: {} };
+                const t = sData?.stats?.traffic || {};
+                window.clusterNodeStats.masterTotalBytes = Number(t.totalGB || 0) * 1073741824;
+                window.clusterNodeStats.masterTodayBytes = Number(t.dailyGB || 0) * 1073741824;
+                window.clusterNodeStats.masterDailyReqs = Number(t.dailyRequests ?? t.totalRequests ?? 0);
+            }
+        } catch(e) {}
+        try {
+            const apiBase = (window.nahanConfig?.apiRoute || "sync").replace(/^\/+|\/+$/g, "");
+            const res = await fetch("/" + apiBase + "/api/nodes");
+            if (res.ok) {
+                const data = await res.json();
+                if (data.success && Array.isArray(data.nodes)) {
+                    window.clusterNodeStats = window.clusterNodeStats || { nodes: {} };
+                    window.clusterNodeStats.nodes = window.clusterNodeStats.nodes || {};
+                    data.nodes.forEach(n => {
+                        const h = (n.url || n.address || "").replace(/^https?:\/\//, "").split("/")[0].trim().toLowerCase();
+                        if (!h) return;
+                        window.clusterNodeStats.nodes[h] = {
+                            ...(window.clusterNodeStats.nodes[h] || {}),
+                            total_bytes: Number(n.total_bytes || 0),
+                            today_bytes: Number(n.total_bytes || 0),
+                            daily_requests: Number(n.daily_requests || 0),
+                            country: n.country || "US",
+                            flag: n.flag || "",
+                            is_online: n.is_online === true,
+                            online: n.is_online === true
+                        };
+                    });
+                }
+            }
+        } catch(e) {}
+    };
 
-                 // سینک مصرف تک‌تک کاربران در حافظه داشبورد
-                 window.nahanUsage = window.nahanUsage || {};
-                 if (sData?.stats?.usage) {
-                     for (const uid in sData.stats.usage) {
-                         const uInfo = sData.stats.usage[uid];
-                         window.nahanUsage[uid] = {
-                             bytes: Number(uInfo.bytes || 0),
-                             dBytes: Number(uInfo.dBytes || 0),
-                             reqs: Math.round(Number(uInfo.bytes || 0) / 178956),
-                             dReqs: Math.round(Number(uInfo.dBytes || 0) / 178956),
-                             lastDay: new Date().toISOString().split('T')[0]
-                         };
-                         window.clusterNodeStats.users[uid] = Number(uInfo.bytes || 0);
-                     }
-                 }
-                 if (typeof renderUsersTable === "function") renderUsersTable();
-             }
-         } catch(e) {}
-         try {
-             const apiBase = (window.nahanConfig?.apiRoute || "sync").replace(/^\/+|\/+$/g, "");
-             const res = await fetch("/" + apiBase + "/api/nodes");
-             if (res.ok) {
-                 const data = await res.json();
-                 if (data.success && Array.isArray(data.nodes)) {
-                     window.clusterNodeStats = window.clusterNodeStats || { nodes: {}, users: {} };
-                     window.clusterNodeStats.nodes = window.clusterNodeStats.nodes || {};
-                     data.nodes.forEach(n => {
-                         const h = (n.url || n.address || "").replace(/^https?:\/\//, "").split("/")[0].trim().toLowerCase();
-                         if (!h) return;
-                         window.clusterNodeStats.nodes[h] = {
-                             ...(window.clusterNodeStats.nodes[h] || {}),
-                             total_bytes: Number(n.total_bytes || 0),
-                             today_bytes: Number(n.today_bytes || n.total_bytes || 0),
-                             daily_requests: Number(n.daily_requests || 0),
-                             country: n.country || "US",
-                             flag: n.flag || "",
-                             is_online: n.is_online === true,
-                             online: n.is_online === true
-                         };
-                     });
-                     if (typeof window.renderTabNodes === "function") window.renderTabNodes();
-                 }
-             }
-         } catch(e) {}
-     };
-window.renderTabNodes = function () {
+    window.renderTabNodes = function () {
         const isEn = (localStorage.getItem("nahan_lang") === "en" || document.documentElement.lang === "en");
         const grid = document.getElementById("tab-nodes-grid");
         const badge = document.getElementById("tab-cluster-capacity-badge");
@@ -5767,12 +5655,7 @@ window.renderTabNodes = function () {
 
                         <div class="text-xs font-mono text-slate-700 dark:text-slate-200 break-all bg-slate-50 dark:bg-darkcard/80 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder flex items-center justify-between">
                             <span>${host}</span>
-                            <div class="flex items-center gap-1.5">
-                                 ${apiKey ? `<span class="text-[10px] text-slate-400 font-mono" title="API Key: ${apiKey}">🔑 ${apiKey.substring(0, 8)}...</span>` : `<span class="text-[10px] text-amber-500 font-mono">بدون کلید</span>`}
-                                 <button type="button" onclick="editTabNodeKey(${idx})" class="p-1 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-500 rounded transition-colors" title="ویرایش کلید نود">
-                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
-                                 </button>
-                             </div>
+                            ${apiKey ? `<span class="text-[10px] text-slate-400 font-mono" title="API Key: ${apiKey}">🔑 ${apiKey.substring(0, 8)}...</span>` : ""}
                         </div>
 
                         <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
@@ -5800,6 +5683,12 @@ window.renderTabNodes = function () {
                         </div>
 
                         <div class="mt-2 pt-2 border-t border-slate-100 dark:border-darkborder/60 space-y-2 text-xs">
+                            <div class="flex items-center justify-between gap-2">
+                                <span class="text-slate-400 text-[11px] whitespace-nowrap">پروکسی IP:</span>
+                                <input type="text" value="${p.proxyIp || ""}" placeholder="104.18.2.1"
+                                    onchange="updateNodeProp(${idx}, 'proxyIp', this.value.trim())"
+                                    class="w-40 px-2 py-1 text-[11px] font-mono rounded-lg bg-slate-50 dark:bg-darkcard border border-slate-200 dark:border-darkborder text-slate-800 dark:text-white focus:outline-none focus:border-primary text-center">
+                            </div>
                             <label class="flex items-center justify-between cursor-pointer text-slate-700 dark:text-slate-300">
                                 <span class="text-[11px] font-medium">هدایت به Upstream (🔗)</span>
                                 <input type="checkbox" ${p.useUpstream ? "checked" : ""}
@@ -5813,10 +5702,7 @@ window.renderTabNodes = function () {
                         <button id="btn-ping-${idx}" onclick="testSingleNode('${host}', 'btn-ping-${idx}')" class="flex-1 py-2 px-3 text-xs font-bold rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 dark:bg-primary/20 dark:text-primary transition flex items-center justify-center gap-1.5 shadow-sm">
                             <span>تست پینگ</span>
                         </button>
-                        <button onclick="assignNodeToAllUsers('${host}')" title="افزودن به همه کاربران" class="py-2 px-2.5 text-xs font-bold rounded-xl bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-500/20 transition flex items-center justify-center gap-1 shadow-sm">
-                            <span>👥 افزودن به همه</span>
-                        </button>
-                        <button onclick="purgeLinkedNode('${host}',${idx})" title="حذف کامل" class="py-2 px-3 text-xs font-bold rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/20 transition flex items-center justify-center gap-1 shadow-sm">
+                        <button onclick="removeLinkedNode(${idx})" class="py-2 px-3 text-xs font-bold rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/20 transition flex items-center justify-center gap-1 shadow-sm">
                             <span>حذف</span>
                         </button>
                     </div>
@@ -5838,213 +5724,6 @@ window.renderTabNodes = function () {
         setTimeout(window.initServersTab, 300);
     }
 })();
-
-    // تابع استعلام زنده آمار و نودها بدون نیاز به رفرش صفحه
-    window.triggerRefreshNodesAndStats = async function(btnEl) {
-        if (btnEl) {
-            btnEl.disabled = true;
-            btnEl.classList.add("opacity-50", "animate-pulse");
-        }
-        if (typeof showToast === "function") showToast("در حال دریافت آمار زنده از کلادفلر و دیتابیس...", "info");
-        try {
-            await fetch("/api/nodes/force-refresh-all", { method: "POST" }).catch(() => {});
-            const res = await fetch("/api/nodes");
-            if (res.ok) {
-                const data = await res.json();
-                if (data.success && Array.isArray(data.nodes)) {
-                    window.clusterNodeStats = window.clusterNodeStats || { nodes: {} };
-                    window.clusterNodeStats.nodes = window.clusterNodeStats.nodes || {};
-                    const cfg = (typeof getActivePanelConfig === "function") ? getActivePanelConfig() : (window.nahanConfig || {});
-                    cfg.linkedPanels = cfg.linkedPanels || [];
-                    data.nodes.forEach(n => {
-                        const h = (n.url || n.address || "").replace(/^https?:\/\//, "").split("/")[0].trim().toLowerCase();
-                        if (!h) return;
-                        window.clusterNodeStats.nodes[h] = {
-                            ...(window.clusterNodeStats.nodes[h] || {}),
-                            total_bytes: Number(n.total_bytes || 0),
-                            today_bytes: Number(n.today_bytes || 0),
-                            daily_requests: Number(n.daily_requests || 0),
-                            country: n.country || "US",
-                            flag: n.flag || "",
-                            is_online: n.is_online === true,
-                            online: n.is_online === true
-                        };
-                        const exists = cfg.linkedPanels.some(p => ((typeof p === "object" ? p.url : p) || "").toLowerCase().includes(h));
-                        if (!exists) {
-                            cfg.linkedPanels.push({ id: n.id || h, name: n.name || h, url: n.url || ("https://" + h), apiKey: n.api_key || "" });
-                        }
-                    });
-                }
-            }
-            if (typeof syncNodesTrafficStats === "function") await syncNodesTrafficStats();
-            if (typeof autoCheckNodesHealth === "function") await autoCheckNodesHealth();
-            if (typeof renderTabNodes === "function") renderTabNodes();
-            if (typeof showToast === "function") showToast("آمار و وضعیت نودها با موفقیت به‌روزرسانی شد.", "success");
-        } catch(e) {
-            if (typeof renderTabNodes === "function") renderTabNodes();
-        } finally {
-            if (btnEl) {
-                btnEl.disabled = false;
-                btnEl.classList.remove("opacity-50", "animate-pulse");
-            }
-        }
-    };
-
-
-    
-
-
-
-    window.assignNodeToAllUsers = async function(nodeHost) {
-        if (!nodeHost) return;
-        // استخراج هاست خالص مطابق منطق getGlobalNodeList
-        let cleanHost = String(nodeHost).trim()
-            .replace(/^[a-zA-Z]+:\/\//, '')
-            .split('/')[0]
-            .split('@').pop()
-            .split(':')[0]
-            .trim();
-
-        if (!confirm(`آیا مطمئن هستید که می‌خواهید سرور "${cleanHost}" را به همه کاربران اختصاص دهید؟`)) return;
-
-        let cfg = (typeof getActivePanelConfig === "function") ? getActivePanelConfig() : (window.nahanConfig || {});
-        if (!cfg.users || !Array.isArray(cfg.users)) {
-            alert("لیست کاربران در تنظیمات یافت نشد.");
-            return;
-        }
-
-        let updatedCount = 0;
-        cfg.users.forEach(u => {
-            let currentList = (u.userNodes || "").split(/[,\r\n;]+/).map(s => s.trim()).filter(Boolean);
-            if (!currentList.includes(cleanHost)) {
-                currentList.push(cleanHost);
-                u.userNodes = currentList.join(',');
-                updatedCount++;
-            }
-        });
-
-        // ذخیره سراسری در کانفیگ پنل و دیتابیس
-        if (typeof doSaveDirectly === "function") {
-            await doSaveDirectly();
-        } else if (typeof doSave === "function") {
-            await doSave();
-        } else if (typeof saveConfig === "function") {
-            await saveConfig();
-        }
-
-        if (typeof showToast === "function") {
-            showToast(`نود به ${updatedCount} کاربر اختصاص یافت و ذخیره شد.`, "success");
-        } else {
-            alert(`نود به ${updatedCount} کاربر اختصاص یافت.`);
-        }
-    };
-
-    window.purgeLinkedNode = async function(nodeHost, idx) {
-        if (!confirm(`آیا از حذف کامل سرور "${nodeHost}" اطمینان دارید؟ این نود از دیتابیس و دسترسی تمام کاربران حذف می‌شود.`)) return;
-
-        let cfg = (typeof getActivePanelConfig === "function") ? getActivePanelConfig() : (window.nahanConfig || {});
-        let targetNode = (cfg.linkedPanels && cfg.linkedPanels[idx]) ? cfg.linkedPanels[idx] : null;
-        let cleanHost = String(nodeHost || "").trim().replace(/^[a-zA-Z]+:\/\//, '').split('/')[0].split(':')[0].trim();
-        let nodeId = targetNode?.id || (targetNode?.url ? targetNode.url.replace(/^https?:\/\//, "").split("/")[0].split(".")[0] : cleanHost);
-
-        // ۱. ارسال درخواست حذف به دیتابیس D1 ورکر
-        try {
-            const apiBase = (cfg.apiRoute || "sync").replace(/^\/+|\/+$/g, "");
-            await fetch(`/${apiBase}/api/nodes?id=${encodeURIComponent(nodeId)}&host=${encodeURIComponent(cleanHost)}`, {
-                method: "DELETE",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ id: nodeId, url: targetNode?.url, host: cleanHost })
-            });
-        } catch(e) {
-            console.error("خطا در ارسال حذف به دیتابیس:", e);
-        }
-
-        // ۲. حذف نود از تمام کاربران
-        if (Array.isArray(cfg.users)) {
-            cfg.users.forEach(u => {
-                if (u.userNodes) {
-                    let list = u.userNodes.split(/[,\r\n;]+/).map(s => s.trim()).filter(Boolean);
-                    list = list.filter(n => n !== cleanHost && !n.includes(cleanHost));
-                    u.userNodes = list.join(',');
-                }
-            });
-        }
-
-        // ۳. حذف از آرایه نودها
-        if (Array.isArray(cfg.linkedPanels)) {
-            cfg.linkedPanels.splice(idx, 1);
-        }
-
-        // ۴. ذخیره تغییرات
-        if (typeof doSaveDirectly === "function") {
-            await doSaveDirectly();
-        } else if (typeof doSave === "function") {
-            await doSave();
-        } else if (typeof saveConfig === "function") {
-            await saveConfig();
-        }
-
-        if (typeof renderLinkedNodes === "function") renderLinkedNodes();
-        if (typeof window.renderTabNodes === "function") window.renderTabNodes();
-        if (typeof showToast === "function") showToast("نود با موفقیت از دیتابیس و کاربران پاک شد.", "success");
-    };
-
-</script>
-
-<script>
-document.addEventListener("DOMContentLoaded", () => {
-  // بارگذاری بلافاصله اطلاعات هنگام باز شدن پنل
-  if (typeof fetchNodes === "function") fetchNodes();
-  if (typeof loadDashboardStats === "function") loadDashboardStats();
-
-  // بروزرسانی دوره‌ای داخل مرورگر در زمان باز ماندن تب
-  setInterval(() => {
-    if (typeof fetchNodes === "function") fetchNodes();
-  }, 30000);
-});
-</script>
-
-<script>
-
-window.editTabNodeKey = async function(idx) {
-    try {
-        const panels = (window.nahanConfig && Array.isArray(window.nahanConfig.linkedPanels)) ? window.nahanConfig.linkedPanels : [];
-        const node = panels[idx];
-        if (!node) {
-            alert("Unknown node");
-            return;
-        }
-        const currentKey = (typeof node === "object" ? (node.apiKey || node.node_key || "") : "");
-        const nodeUrl = typeof node === "object" ? (node.url || node.name || "") : String(node);
-        const newKey = prompt("Enter new key:\n" + nodeUrl, currentKey);
-        if (newKey === null) return;
-        const cleanKey = newKey.trim();
-        if (!cleanKey) {
-            alert("Invalid key");
-            return;
-        }
-        if (cleanKey === currentKey) return;
-        if (typeof node === "object") {
-            node.apiKey = cleanKey;
-            node.node_key = cleanKey;
-        }
-        const apiBase = (window.nahanConfig&&window.nahanConfig.apiRoute ? window.nahanConfig.apiRoute : "sync").replace(/^\/+|\/+$/g, "");
-        try {
-            await fetch("/" + apiBase + "/api/nodes/update-key", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ url: nodeUrl, id: node.id || "", apiKey: cleanKey, node_key: cleanKey })
-            });
-        } catch(e){}
-        if (typeof renderTabNodes === "function") renderTabNodes();
-        if (typeof renderLinkedNodes === "function") renderLinkedNodes();
-        if (typeof saveConfig === "function") await saveConfig();
-        alert("کلید با بوفحیت ذخیر؇ شد.");
-    } catch(err) {
-        alert("Error: " + err.message);
-    }
-};
-
 </script>
 </body>
 </html>

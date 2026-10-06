@@ -1070,12 +1070,12 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                                   </div>
                               </div>
                           </div>
-                          <!-- Section: Upstream VLESS -->
+                          <!-- Section: Proxy Chain -->
                           <div class="bg-[var(--color-surface)]  rounded-2xl border border-slate-200 dark:border-darkborder overflow-hidden" data-accordion="">
                               <button onclick="toggleAccordion(this)" class="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                                   <div class="flex items-center gap-3">
                                       <span class="text-lg">🔗</span>
-                                      <span class="text-sm font-bold text-slate-700 dark:text-white" data-i18n="adv_upstream_title">Upstream VLESS</span>
+                                      <span class="text-sm font-bold text-slate-700 dark:text-white" data-i18n="adv_upstream_title">پروکسی چین (Proxy Chain)</span>
                                       <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800" data-i18n="adv_upstream_badge">Sing-Box / Clash</span>
                                   </div>
                                   <svg class="w-4 h-4 text-slate-400 transform transition-transform duration-200 accordion-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
@@ -2340,7 +2340,7 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                     format_obfuscated: "Obfuscated (UTF-8 + XOR)",
                      btn_redeploy_force: "Force Redeploy / Switch Format",
                     adv_network_dns: "Network & DNS", adv_proxy_relay: "Proxy & Relay", adv_subscription: "Subscription",
-                    adv_upstream_title: "Upstream VLESS", adv_upstream_badge: "Sing-Box / Clash",
+                    adv_upstream_title: "Proxy Chain", adv_upstream_badge: "Sing-Box / Clash",
                     adv_upstream_desc1: "<strong>What does this do?</strong><br>It lets you use a free VLESS server (from sites like RaceVPN or SSHMax) so all your traffic goes through that server. Your exit IP becomes the server's IP.",
                     adv_upstream_desc2: "<strong>Why is it useful?</strong><br>Sometimes you need an IP from a specific country (like Germany or USA) but don't want to buy a server. This lets you use that country's IP for free.",
                     adv_upstream_desc3: "<strong>How to use?</strong><br>1. Get a VLESS link from one of the sites below<br>2. Paste it here<br>3. Click Save<br>4. Use the subscription link (Sing-Box or Clash format)",
@@ -2452,7 +2452,7 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                     format_obfuscated: "مبهم‌سازی شده (UTF-8 + XOR)",
                     btn_redeploy_force: "تفویض مجدد / تغییر قالب پنل",
                     adv_network_dns: "شبکه و DNS", adv_proxy_relay: "پروکسی و رله", adv_subscription: "اشتراک",
-                    adv_upstream_title: "آپ‌استریم VLESS", adv_upstream_badge: "Sing-Box / Clash",
+                    adv_upstream_title: "پروکسی زنجیره‌ای (Proxy Chain)", adv_upstream_badge: "Sing-Box / Clash",
                     adv_upstream_desc1: "<strong>این بخش چیکار میکنه؟</strong><br>یه سرور رایگان VLESS (مثلاً از سایت‌هایی مثل RaceVPN یا SSHMax) به پنل معرفی می‌کنی تا تمام ترافیکت از اون سوراخ رد بشه. یعنی IP خروجیت میشه IP اون سرور.",
                     adv_upstream_desc2: "<strong>چرا لازمه؟</strong><br>بعضی وقتا به IP یه کشور خاص (مثلاً آلمان یا آمریکا) نیاز داری ولی نمی‌خوای سرور بخری. با این بخش می‌تونی رایگان از IP اون کشور استفاده کنی.",
                     adv_upstream_desc3: "<strong>چطوری استفاده کنم؟</strong><br>۱. از یکی از سایت‌های زیر یه لینک VLESS بگیر<br>۲. لینک رو اینجا paste کن<br>۳. Save کن<br>۴. از لینک سابسکریپشن (فرمت Sing-Box یا Clash) استفاده کن",
@@ -2534,10 +2534,10 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
           const CHANGELOG_DATA = {
 
               "3.0.0": {
-                  headline: { en: "Upstream VLESS, Redesigned User Management & Better UX", fa: "Upstream VLESS، بازطراحی مدیریت کاربران و تجربه کاربری بهتر" },
+                  headline: { en: "Proxy Chain, Redesigned User Management & Better UX", fa: "Proxy Chain، بازطراحی مدیریت کاربران و تجربه کاربری بهتر" },
                   added: [
-                      { en: "Upstream VLESS / Proxy Chaining — you can now chain your panel with another VLESS server to bypass restrictions", fa: "قابلیت Upstream VLESS / پروکسی زنجیره‌ای — حالا می‌تونی پنلت رو با یه سرور VLESS دیگه زنجیره کنی تا محدودیت‌ها دور زده بشه" },
-                      { en: "Upstream VLESS section with simple explanations and links to free config providers", fa: "بخش Upstream VLESS با توضیحات ساده و لینک سایت‌های دریافت کانفیگ رایگان" },
+                      { en: "پروکسی زنجیره‌ای (Proxy Chain) — you can now chain your panel with another VLESS server to bypass restrictions", fa: "قابلیت Proxy Chain / پروکسی زنجیره‌ای — حالا می‌تونی پنلت رو با یه سرور VLESS دیگه زنجیره کنی تا محدودیت‌ها دور زده بشه" },
+                      { en: "Proxy Chain section with simple explanations and links to free config providers", fa: "بخش Proxy Chain با توضیحات ساده و لینک سایت‌های دریافت کانفیگ رایگان" },
                       { en: "v2rayN JSON subscription format (?flag=vjson) added to subscription page", fa: "فرمت سابسکریپشن v2rayN JSON (?flag=vjson) به صفحه سابسکریپشن اضافه شد" },
                       { en: "Custom Routing section now has bilingual descriptions (Farsi + English)", fa: "بخش مسیریابی سفارشی حالا توضیحات دوزبانه داره (فارسی + انگلیسی)" },
                       { en: "Custom confirm modal instead of browser's default alert/confirm dialogs", fa: "مودال تأیید سفارشی به جای دیالوگ‌های پیش‌فرض مرورگر" },
@@ -5690,7 +5690,7 @@ function buildModeCheckboxes(wrapId, userMode) {
                                     class="w-40 px-2 py-1 text-[11px] font-mono rounded-lg bg-slate-50 dark:bg-darkcard border border-slate-200 dark:border-darkborder text-slate-800 dark:text-white focus:outline-none focus:border-primary text-center">
                             </div>
                             <label class="flex items-center justify-between cursor-pointer text-slate-700 dark:text-slate-300">
-                                <span class="text-[11px] font-medium">هدایت به Upstream (🔗)</span>
+                                <span class="text-[11px] font-medium">زنجیره پروکسی (Chain 🔗)</span>
                                 <input type="checkbox" ${p.useUpstream ? "checked" : ""}
                                     onchange="toggleNodeUpstream(${idx}, this.checked)"
                                     class="w-4 h-4 text-primary rounded border-slate-300 dark:border-darkborder cursor-pointer">

@@ -1190,7 +1190,7 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                               <button onclick="toggleAccordion(this)" class="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                                   <div class="flex items-center gap-3">
                                       <span class="text-lg">🔗</span>
-                                      <span class="text-sm font-bold text-slate-700 dark:text-white" data-i18n="adv_upstream_title">Upstream VLESS</span>
+                                      <span class="text-sm font-bold text-slate-700 dark:text-white" data-i18n="adv_upstream_title">Proxy Chain</span>
                                       <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800" data-i18n="adv_upstream_badge">Sing-Box / Clash</span>
                                   </div>
                                   <svg class="w-4 h-4 text-slate-400 transform transition-transform duration-200 accordion-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
@@ -1199,7 +1199,7 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                                   <div class="space-y-4 px-5 pb-5 pt-1">
                                       <!-- Explanation box -->
                                       <div class="p-4 rounded-xl bg-indigo-50 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-900/30 text-xs text-indigo-700 dark:text-indigo-300 leading-relaxed font-sans space-y-2">
-                                          <p data-i18n="adv_upstream_desc1"><strong>این بخش چیکار میکنه؟</strong><br>یه سرور رایگان VLESS (مثلاً از سایت‌هایی مثل RaceVPN یا SSHMax) به پنل معرفی می‌کنی تا تمام ترافیکت از اون سوراخ رد بشه. یعنی IP خروجیت میشه IP اون سرور.</p>
+                                          <p data-i18n="adv_upstream_desc1"><strong>این بخش چیکار میکنه؟</strong><br>ترافیک خروجی پنل یا نودها را از طریق یک سرور میانی/مقصد هدایت می‌کنید تا فیلترینگ دور زده شده و آی‌پی خروجی تغییر کند.</p>
                                           <p data-i18n="adv_upstream_desc2"><strong>چرا لازمه؟</strong><br>بعضی وقتا به IP یه کشور خاص (مثلاً آلمان یا آمریکا) نیاز داری ولی نمی‌خوای سرور بخری. با این بخش می‌تونی رایگان از IP اون کشور استفاده کنی.</p>
                                           <p data-i18n="adv_upstream_desc3"><strong>چطوری استفاده کنم؟</strong><br>۱. از یکی از سایت‌های زیر یه لینک VLESS بگیر<br>۲. لینک رو اینجا paste کن<br>۳. Save کن<br>۴. از لینک سابسکریپشن (فرمت Sing-Box یا Clash) استفاده کن</p>
                                       </div>
@@ -2455,11 +2455,11 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                     format_obfuscated: "Obfuscated (UTF-8 + XOR)",
                      btn_redeploy_force: "Force Redeploy / Switch Format",
                     adv_network_dns: "Network & DNS", adv_proxy_relay: "Proxy & Relay", adv_subscription: "Subscription",
-                    adv_upstream_title: "Upstream VLESS", adv_upstream_badge: "Sing-Box / Clash",
-                    adv_upstream_desc1: "<strong>What does this do?</strong><br>It lets you use a free VLESS server (from sites like RaceVPN or SSHMax) so all your traffic goes through that server. Your exit IP becomes the server's IP.",
+                    adv_upstream_title: "Proxy Chain", adv_upstream_badge: "Sing-Box / Clash",
+                    adv_upstream_desc1: "<strong>What does this do?</strong><br>Route panel and node traffic through an intermediate/destination proxy chain server to bypass filtering and change exit IP.",
                     adv_upstream_desc2: "<strong>Why is it useful?</strong><br>Sometimes you need an IP from a specific country (like Germany or USA) but don't want to buy a server. This lets you use that country's IP for free.",
                     adv_upstream_desc3: "<strong>How to use?</strong><br>1. Get a VLESS link from one of the sites below<br>2. Paste it here<br>3. Click Save<br>4. Use the subscription link (Sing-Box or Clash format)",
-                    adv_upstream_label: "VLESS Server Link", adv_upstream_hint: "Copy a VLESS link from one of these sites and paste it here:",
+                    adv_upstream_label: "Proxy Chain Server Link (VLESS)", adv_upstream_hint: "Copy a VLESS link from one of these sites and paste it here:",
                     adv_upstream_providers: "Free VLESS Providers:", adv_upstream_warning: "Free configs usually expire after a few days. If the connection drops, get a new link and replace it. Also only works with Sing-Box and Clash formats.",
                     adv_routing_title: "Custom Routing", adv_routing_desc: "<strong>What does this do?</strong><br>Some sites or addresses you want to access directly without proxy. Add them here so their traffic goes through the normal path instead of the proxy.", adv_routing_label: "Custom Direct Routing", adv_routing_hint: "One domain, IP, geoip (e.g., geoip:ir) or geosite (e.g., geosite:ir) per line.", adv_routing_warning: "Wrong entries or bad formatting can break connections. Double check before saving.",
                     adv_protocol: "Protocol", adv_telegram: "Telegram Bot", adv_cloudflare: "Cloudflare",
@@ -2567,11 +2567,11 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                     format_obfuscated: "مبهم‌سازی شده (UTF-8 + XOR)",
                     btn_redeploy_force: "تفویض مجدد / تغییر قالب پنل",
                     adv_network_dns: "شبکه و DNS", adv_proxy_relay: "پروکسی و رله", adv_subscription: "اشتراک",
-                    adv_upstream_title: "آپ‌استریم VLESS", adv_upstream_badge: "Sing-Box / Clash",
-                    adv_upstream_desc1: "<strong>این بخش چیکار میکنه؟</strong><br>یه سرور رایگان VLESS (مثلاً از سایت‌هایی مثل RaceVPN یا SSHMax) به پنل معرفی می‌کنی تا تمام ترافیکت از اون سوراخ رد بشه. یعنی IP خروجیت میشه IP اون سرور.",
+                    adv_upstream_title: "زنجیره پروکسی (Proxy Chain)", adv_upstream_badge: "Sing-Box / Clash",
+                    adv_upstream_desc1: "<strong>این بخش چیکار میکنه؟</strong><br>ترافیک خروجی پنل یا نودها را از طریق یک سرور میانی/مقصد هدایت می‌کنید تا فیلترینگ دور زده شده و آی‌پی خروجی تغییر کند.",
                     adv_upstream_desc2: "<strong>چرا لازمه؟</strong><br>بعضی وقتا به IP یه کشور خاص (مثلاً آلمان یا آمریکا) نیاز داری ولی نمی‌خوای سرور بخری. با این بخش می‌تونی رایگان از IP اون کشور استفاده کنی.",
                     adv_upstream_desc3: "<strong>چطوری استفاده کنم؟</strong><br>۱. از یکی از سایت‌های زیر یه لینک VLESS بگیر<br>۲. لینک رو اینجا paste کن<br>۳. Save کن<br>۴. از لینک سابسکریپشن (فرمت Sing-Box یا Clash) استفاده کن",
-                    adv_upstream_label: "لینک سرور VLESS", adv_upstream_hint: "لینک VLESS رو از سایت‌های زیر کپی کن و اینجا بذار:",
+                    adv_upstream_label: "لینک سرور مقصد زنجیره پروکسی", adv_upstream_hint: "لینک VLESS رو از سایت‌های زیر کپی کن و اینجا بذار:",
                     adv_upstream_providers: "سایت‌های دریافت لینک رایگان:", adv_upstream_warning: "کانفیگ‌های رایگان معمولاً چند روز بیشتر دوام ندارن. اگه اتصال قطع شد، لینک جدید بگیر و جایگزین کن. همچنین فقط با فرمت‌های Sing-Box و Clash کار می‌کنه.",
                     adv_routing_title: "مسیریابی سفارشی", adv_routing_desc: "<strong>این بخش چیکار میکنه؟</strong><br>بعضی سایت‌ها یا آدرس‌ها رو می‌خوای بدون پروکسی باز کنی (مستقیم وصل بشی). اینجا آدرس‌ها رو بنویس تا ترافیکشون از مسیر عادی رد بشه.", adv_routing_label: "مسیریابی مستقیم سفارشی", adv_routing_hint: "هر خط یه آدرس، IP، geoip (مثلاً geoip:ir) یا geosite (مثلاً geosite:ir) باشه.", adv_routing_warning: "اگه آدرس اشتباه بنویسی یا فرمت درست نباشه، اتصال قطع میشه. قبل از ذخیره حتماً چک کن.",
                     adv_protocol: "پروتکل", adv_telegram: "ربات تلگرام", adv_cloudflare: "کلودفلر",
@@ -4849,7 +4849,7 @@ function buildModeCheckboxes(wrapId, userMode) {
                    cleanIpArray.push(...cleanIpsCustom.split(/[\s,;]+/).map(s=>s.trim()).filter(Boolean));
                }
                const cleanIp = cleanIpArray.length ? cleanIpArray.join(',') : null;
-              const userMode = readModeFromCheckboxes('edit-mode-cb');
+              const userMode = readModeFromCheckboxes('edit-user-mode-wrap-cb');
               const userPorts = readPortsFromCheckboxes('edit-user-ports-wrap');
                let maxConfigs = document.getElementById('edit-user-max-configs').value;
                maxConfigs = maxConfigs ? parseInt(maxConfigs) : null;
@@ -5537,7 +5537,7 @@ function buildModeCheckboxes(wrapId, userMode) {
         }
     };
 
-    window.toggleNodeUpstream = async function (idx, enabled) {
+    window.toggleNodeProxyChain = async function (idx, enabled) {
          const cfg = (typeof getActivePanelConfig === "function") ? getActivePanelConfig() : (window.nahanConfig || {});
          if (cfg.linkedPanels && cfg.linkedPanels[idx]) {
              cfg.linkedPanels[idx].useUpstream = !!enabled;
@@ -5549,7 +5549,7 @@ function buildModeCheckboxes(wrapId, userMode) {
                  await saveConfig();
              }
              if (typeof showToast === "function") {
-                 showToast(enabled ? "هدایت نود به Upstream فعال و ذخیره شد." : "هدایت نود به Upstream غیرفعال شد.", "success");
+                 showToast(enabled ? "اتصال نود به زنجیره پروکسی فعال شد." : "اتصال نود به زنجیره پروکسی غیرفعال شد.", "success");
              }
          }
      };
@@ -5860,9 +5860,9 @@ window.renderTabNodes = function () {
 
                         <div class="mt-2 pt-2 border-t border-slate-100 dark:border-darkborder/60 space-y-2 text-xs">
                             <label class="flex items-center justify-between cursor-pointer text-slate-700 dark:text-slate-300">
-                                <span class="text-[11px] font-medium">هدایت به Upstream (🔗)</span>
+                                <span class="text-[11px] font-medium">اتصال به زنجیره پروکسی (🔗 Proxy Chain)</span>
                                 <input type="checkbox" ${p.useUpstream ? "checked" : ""}
-                                    onchange="toggleNodeUpstream(${idx}, this.checked)"
+                                    onchange="toggleNodeProxyChain(${idx}, this.checked)"
                                     class="w-4 h-4 text-primary rounded border-slate-300 dark:border-darkborder cursor-pointer">
                             </label>
                         </div>

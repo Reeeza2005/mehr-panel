@@ -1,3 +1,19 @@
+function parseChainTarget(uri) {
+    if (!uri || typeof uri !== "string") return null;
+    try {
+        let cleanUri = uri.trim();
+        if (cleanUri.startsWith("vmess://")) {
+            const raw = atob(cleanUri.replace("vmess://", ""));
+            const j = JSON.parse(raw);
+            return { host: j.add || j.host, port: parseInt(j.port) || 443 };
+        }
+        const u = new URL(cleanUri);
+        return { host: u.hostname, port: parseInt(u.port) || 443 };
+    } catch(e) {
+        return null;
+    }
+}
+
 function safeBtoa(str) {
     try {
         const bytes = new TextEncoder().encode(str);
@@ -469,7 +485,7 @@ export default {
                 // استخراج نودهای فعال
                 // استخراج نودهای فعال و نودهای فرعی BPB
                 let nodesList = [];
-if((env.DB || env.IOT_DB)) {try{const{results:nR}=await (env.DB || env.IOT_DB).prepare("SELECT * FROM nodes WHERE status='active' AND (address IS NOT NULL OR url IS NOT NULL)").all();if(nR&&nR.length>0){nodeTargets=nR.map(n=>({name:n.name||"Edge",host:(n.address||n.url||"").replace(/^https?:\/\//,"").split("/")[0].trim(),path:"vl",isNode:true})).filter(n=>n.host.length>0);}}catch(e){}}
+
     if ((env.DB || env.IOT_DB)) {
         try {
             const { results } = await (env.DB || env.IOT_DB).prepare("SELECT * FROM nodes WHERE status = 'active' AND (address IS NOT NULL OR url IS NOT NULL)").all();
@@ -487,7 +503,7 @@ if((env.DB || env.IOT_DB)) {try{const{results:nR}=await (env.DB || env.IOT_DB).p
                      ...n,
                      host: h,
                      path: "vl",
-                     useUpstream: isUp || Boolean(n.useUpstream || n.use_upstream)
+                     useUpstream: isUp || Boolean(n.useUpstream || n.use_upstream || n.useProxyChain || n.use_proxy_chain)
                  };
              });
             if (nodesList.length > 0) nodeTargets = nodesList;
@@ -510,34 +526,33 @@ if((env.DB || env.IOT_DB)) {try{const{results:nR}=await (env.DB || env.IOT_DB).p
                      ...n,
                      host: h,
                      path: "vl",
-                     useUpstream: isUp || Boolean(n.useUpstream || n.use_upstream)
+                     useUpstream: isUp || Boolean(n.useUpstream || n.use_upstream || n.useProxyChain || n.use_proxy_chain)
                  };
              });
             if (nodesList.length > 0) nodeTargets = nodesList;
         } catch(e) {}
     }
-    if ((env.DB || env.IOT_DB)) {
-        try {
-            const { results } = await (env.DB || env.IOT_DB).prepare("SELECT * FROM nodes WHERE status = 'active' AND (address IS NOT NULL OR url IS NOT NULL)").all();
-            nodesList = (results || []).filter(n => (n.address || n.url)).map(n => {
-                let h = (n.address || n.url || "").replace(/^https?:\/\//, "").split("/")[0].trim();
-                return { host: h, name: n.name || "Node", isNode: true, path: "vl" };
-            });
-        } catch(e) {}
-    }
-    if (nodesList.length > 0) {
-        nodeTargets = nodesList;
-    }
+
                 if (sysConfig && Array.isArray(sysConfig.linkedPanels)) {
                     sysConfig.linkedPanels.forEach((p, idx) => {
                         if (p && p.url) {
-                            nodesList.push({
-                                url: p.url,
-                                name: p.name || ("BPB-Node-" + (idx + 1)),
-                                proxyIp: p.proxyIp || "",
-                                useUpstream: !!(p.useUpstream || p.use_upstream),
-                                status: "active"
-                            });
+                            const pHost = p.url.replace(/^https?:\/\//, "").split("/")[0].trim().toLowerCase();
+                            const existing = nodesList.find(n => (n.host || n.address || n.url || "").replace(/^https?:\/\//, "").split("/")[0].trim().toLowerCase() === pHost);
+                            if (existing) {
+                                // در صورت وجود، وضعیت useUpstream مستقیماً با تنظیمات داشبورد به‌روز می‌شود
+                                existing.useUpstream = !!(p.useUpstream || p.use_upstream);
+                                if (p.proxyIp) existing.proxyIp = p.proxyIp;
+                                if (p.name) existing.name = p.name;
+                            } else {
+                                nodesList.push({
+                                    url: p.url,
+                                    host: pHost,
+                                    name: p.name || ("BPB-Node-" + (idx + 1)),
+                                    proxyIp: p.proxyIp || "",
+                                    useUpstream: !!(p.useUpstream || p.use_upstream),
+                                    status: "active"
+                                });
+                            }
                         }
                     });
                 }
@@ -722,6 +737,7 @@ if((env.DB || env.IOT_DB)) {try{const{results:nR}=await (env.DB || env.IOT_DB).p
 
                 let cfgIndex = 0;
             
+    nodeTargets = (nodeTargets || []).filter(t => t && t.host && t.host.trim().length > 0 && t.host !== "null");
     for (const target of nodeTargets) {
                     const endpoints = cleanEntries.length > 0 ? cleanEntries : [{ ip: target.host, name: "Direct" }];
 
@@ -744,16 +760,28 @@ if((env.DB || env.IOT_DB)) {try{const{results:nR}=await (env.DB || env.IOT_DB).p
                                 const portLabel = port !== 443 ? ":" + port : "";
                                 const baseTag = target.name + "-" + (ep.name || ep.ip) + portLabel + pipLabel + smartLabelSuffix;
 
-                                if (isTls) {
-                                    if (allowVless) {
-                                        vlessConfigs.push("vless://" + userUuid + "@" + ep.ip + ":" + port + "?encryption=none&security=tls&sni=" + target.host + "&host=" + target.host + "&type=ws&path=%2F" + target.path + pipQuery + "#" + encodeURIComponent(formatConfigName("vless", displayName, port, target.host, ep.ip, ++cfgIndex, sysConfig, (target.country || target.country || 'US'), !!(target.useUpstream || target.use_upstream)) + smartLabelSuffix));
-                                    }
-                                    if (allowTrojan) {
-                                        vlessConfigs.push("trojan://" + userUuid + "@" + ep.ip + ":" + port + "?security=tls&sni=" + target.host + "&host=" + target.host + "&type=ws&path=%2Ftr" + pipQuery + "#" + encodeURIComponent(formatConfigName("trojan", displayName, port, target.host, ep.ip, ++cfgIndex, sysConfig, (target.country || target.country || 'US'), !!(target.useUpstream || target.use_upstream)) + smartLabelSuffix));
+                                const isNodeChain = Boolean(target.useUpstream || target.use_upstream || target.useProxyChain);
+                                if (isNodeChain) {
+                                    const chainRaw = (sysConfig.upstreamUri || "").trim();
+                                    const chainTarget = parseChainTarget(chainRaw);
+                                    if (chainTarget && chainTarget.host) {
+                                        const flag = getCountryFlag(target.country || sysConfig.defaultCountry || 'DE') || '🌐';
+                                        const chainTag = "🔗 " + flag + " " + (target.name || "Edge") + " ➔ " + chainTarget.host;
+                                        const chainUrl = "vless://" + userUuid + "@" + ep.ip + ":" + port + "?encryption=none&security=" + (isTls ? "tls" : "none") + "&sni=" + target.host + "&host=" + target.host + "&type=ws&path=%2F" + target.path + "%3Fchain%3D" + encodeURIComponent(chainRaw) + "#" + encodeURIComponent(chainTag);
+                                        vlessConfigs.push(chainUrl);
                                     }
                                 } else {
-                                    if (allowVless) {
-                                        vlessConfigs.push("vless://" + userUuid + "@" + ep.ip + ":" + port + "?encryption=none&security=none&host=" + target.host + "&type=ws&path=%2F" + target.path + pipQuery + "#" + encodeURIComponent("VL-HTTP-" + baseTag));
+                                    if (isTls) {
+                                        if (allowVless) {
+                                            vlessConfigs.push("vless://" + userUuid + "@" + ep.ip + ":" + port + "?encryption=none&security=tls&sni=" + target.host + "&host=" + target.host + "&type=ws&path=%2F" + target.path + pipQuery + "#" + encodeURIComponent(formatConfigName("vless", displayName, port, target.host, ep.ip, ++cfgIndex, sysConfig, (target.country || target.country || 'US'), false) + smartLabelSuffix));
+                                        }
+                                        if (allowTrojan) {
+                                            vlessConfigs.push("trojan://" + userUuid + "@" + ep.ip + ":" + port + "?security=tls&sni=" + target.host + "&host=" + target.host + "&type=ws&path=%2Ftr" + pipQuery + "#" + encodeURIComponent(formatConfigName("trojan", displayName, port, target.host, ep.ip, ++cfgIndex, sysConfig, (target.country || target.country || 'US'), false) + smartLabelSuffix));
+                                        }
+                                    } else {
+                                        if (allowVless) {
+                                            vlessConfigs.push("vless://" + userUuid + "@" + ep.ip + ":" + port + "?encryption=none&security=none&host=" + target.host + "&type=ws&path=%2F" + target.path + pipQuery + "#" + encodeURIComponent("VL-HTTP-" + baseTag));
+                                        }
                                     }
                                 }
                             }
@@ -1049,7 +1077,28 @@ if((env.DB || env.IOT_DB)) {try{const{results:nR}=await (env.DB || env.IOT_DB).p
                     wsOk = false;
                 }
 
-                const ok = res.status < 400 && !isBlocked && wsOk;
+                let chainAlive = true;
+                if (targetNode && (targetNode.useUpstream || targetNode.use_upstream || targetNode.useProxyChain)) {
+                    const ct = parseChainTarget(sysConfig.upstreamUri || "");
+                    if (!ct || !ct.host) {
+                        chainAlive = false;
+                    } else {
+                        try {
+                            const pingRes = await fetch("https://" + ct.host + (ct.port === 443 ? "" : ":" + ct.port) + "/", { method: "HEAD", signal: AbortSignal.timeout(2500) }).catch(() => null);
+                            if (!pingRes && ct.port === 443) {
+                                const dns = await fetch("https://cloudflare-dns.com/dns-query?name=" + ct.host + "&type=A", { headers: { accept: "application/dns-json" }, signal: AbortSignal.timeout(2000) }).then(r=>r.json()).catch(()=>null);
+                                if (!dns || !dns.Answer || dns.Answer.length === 0) chainAlive = false;
+                            }
+                        } catch(e) {
+                            chainAlive = false;
+                        }
+                    }
+                    if (!chainAlive) {
+                        wsOk = false;
+                        blockReason = "upstream_chain_down";
+                    }
+                }
+                const ok = res.status < 400 && !isBlocked && wsOk && chainAlive;
 
                 // تشخیص دیتاسنتر و کشور سرور از روی هدرهای پاسخ کلادفلر نود
                 const cfRay = res.headers.get("cf-ray") || "";
@@ -1135,6 +1184,19 @@ if((env.DB || env.IOT_DB)) {try{const{results:nR}=await (env.DB || env.IOT_DB).p
                             }
                         } catch(dbErr) {
                             console.error("D1 users sync error:", dbErr);
+                        }
+                    }
+                }
+                if ((env.DB || env.IOT_DB) && Array.isArray(sysConfig.linkedPanels)) {
+                    for (const p of sysConfig.linkedPanels) {
+                        if (p && p.url) {
+                            const pHost = p.url.replace(/^https?:\/\//, "").split("/")[0].trim();
+                            const upVal = (p.useUpstream || p.use_upstream) ? 1 : 0;
+                            try {
+                                await (env.DB || env.IOT_DB).prepare(
+                                    "UPDATE nodes SET useUpstream = ? WHERE address LIKE ? OR url LIKE ? OR id = ?"
+                                ).bind(upVal, '%' + pHost + '%', '%' + pHost + '%', p.id || pHost).run();
+                            } catch(e) {}
                         }
                     }
                 }
@@ -1284,9 +1346,10 @@ if((env.DB || env.IOT_DB)) {try{const{results:nR}=await (env.DB || env.IOT_DB).p
                     if (!nodeId) {
                         return jsonResponse({ success: false, error: "Missing node id" }, 400);
                     }
+                    const upVal = (b.useUpstream !== undefined) ? (b.useUpstream ? 1 : 0) : ((b.useProxyChain !== undefined) ? (b.useProxyChain ? 1 : 0) : null);
                     await (env.DB || env.IOT_DB).prepare(
-                        "UPDATE nodes SET name = COALESCE(?, name), address = COALESCE(?, address), url = COALESCE(?, url), status = COALESCE(?, status) WHERE id = ?"
-                    ).bind(b.name || null, b.address || b.url || null, b.url || b.address || null, b.status || null, nodeId).run();
+                        "UPDATE nodes SET name = COALESCE(?, name), address = COALESCE(?, address), url = COALESCE(?, url), status = COALESCE(?, status), useUpstream = COALESCE(?, useUpstream) WHERE id = ?"
+                    ).bind(b.name || null, b.address || b.url || null, b.url || b.address || null, b.status || null, upVal, nodeId).run();
                     return jsonResponse({ success: true, message: "Node updated successfully" });
                 } catch(err) {
                     return jsonResponse({ success: false, error: err.message }, 500);

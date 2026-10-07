@@ -1,0 +1,12 @@
+name = "mehr"
+main = "_worker.js"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+# CLUSTER_KEY = "your-custom-cluster-secret"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "super_panel_db"
+database_id = "YOUR_D1_DATABASE_ID_HERE"

@@ -1,4 +1,4 @@
-const WIZARD_VERSION = "2.1.0";
+const WIZARD_VERSION = "1.2.0";
 // =============================================================================
 // Mehr Unified Deployment Wizard (Multi-Account & Auto-Stats Edition)
 // =============================================================================
@@ -126,7 +126,7 @@ async function deployMasterPanel(token, accountId, panelName) {
                     'cfApiToken', '${token}',
                     'name', 'مِهر',
                     'apiRoute', 'sync',
-                    'clusterKey', 'mehr_cluster_secret_2026'
+                    'clusterKey', '${crypto.randomUUID().replace(/-/g, "")}'
                 )
             ) ON CONFLICT(key) DO UPDATE SET
                 value = json_set(value, '$.cfAccountId', '${accountId}', '$.cfWorkerName', '${panelName}', '$.cfApiToken', '${token}');
@@ -187,7 +187,7 @@ async function deployEdgeNode(token, accountId, nodeName, customMasterUrl = "") 
     const agentSource = await fetchFromGithub("mehr-agent.js");
 
     let masterUrl = customMasterUrl.trim().replace(/\/+$/, "");
-    let clusterSecret = "mehr_cluster_secret_2026";
+    let clusterSecret = "";
 
     if (!masterUrl) {
         try {
@@ -216,6 +216,9 @@ async function deployEdgeNode(token, accountId, nodeName, customMasterUrl = "") 
 
     if (!masterUrl) {
         throw new Error("آدرس پنل مستر مشخص نیست. لطفاً آدرس پنل اصلی را در فرم وارد کنید.");
+    }
+    if (!clusterSecret) {
+        throw new Error("کلید کلاستر (Cluster Key) یافت نشد. برای اتصال نود سفارشی، کلید کلاستر پنل الزامی است.");
     }
 
     const form = new FormData();

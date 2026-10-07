@@ -5,3 +5,8 @@
 node_modules/
 *.py
 wrangler.node*.toml
+.wrangler/
+wrangler.node*.toml
+node_modules/
+archive_patches/
+*.tmp

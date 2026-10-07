@@ -1,4 +1,4 @@
-const WIZARD_VERSION = "1.3.4";
+const WIZARD_VERSION = "1.3.5";
 // =============================================================================
 // Mehr Unified Deployment Wizard (Multi-Account & Auto-Stats Edition)
 // =============================================================================
@@ -224,19 +224,38 @@ async function deployEdgeNode(token, accountId, nodeName, customMasterUrl = "", 
         throw new Error("کلید کلاستر (Cluster Key) یافت نشد. برای اتصال نود سفارشی، کلید کلاستر پنل الزامی است.");
     }
 
+    // استخراج هوشمند نام سرویس ورکر مستر جهت Service Binding
+    let masterServiceName = "";
+    try {
+        const u = new URL(masterUrl.startsWith("http") ? masterUrl : `https://${masterUrl}`);
+        if (u.hostname.endsWith(".workers.dev")) {
+            masterServiceName = u.hostname.split(".")[0];
+        }
+    } catch(e) {}
+
+    const edgeBindings = [
+        { type: "plain_text", name: "PANEL_URL", text: new URL(masterUrl.startsWith("http") ? masterUrl : `https://${masterUrl}`).origin },
+        { type: "plain_text", name: "CLUSTER_KEY", text: clusterSecret },
+        { type: "plain_text", name: "API_KEY", text: nodeApiKey },
+        { type: "plain_text", name: "NODE_ID", text: nodeName },
+        { type: "plain_text", name: "CF_ACCOUNT_ID", text: accountId },
+        { type: "plain_text", name: "CF_API_TOKEN", text: token }
+    ];
+
+    if (masterServiceName) {
+        edgeBindings.push({
+            type: "service",
+            name: "PANEL_SERVICE",
+            service: masterServiceName
+        });
+    }
+
     const form = new FormData();
     const metadata = {
         main_module: "agent.js",
         compatibility_date: new Date().toISOString().split("T")[0],
         compatibility_flags: ["nodejs_compat"],
-        bindings: [
-            { type: "plain_text", name: "PANEL_URL", text: new URL(masterUrl.startsWith("http") ? masterUrl : `https://${masterUrl}`).origin },
-            { type: "plain_text", name: "CLUSTER_KEY", text: clusterSecret },
-            { type: "plain_text", name: "API_KEY", text: nodeApiKey },
-            { type: "plain_text", name: "NODE_ID", text: nodeName },
-            { type: "plain_text", name: "CF_ACCOUNT_ID", text: accountId },
-            { type: "plain_text", name: "CF_API_TOKEN", text: token }
-        ]
+        bindings: edgeBindings
     };
 
     form.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));

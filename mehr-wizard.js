@@ -1,4 +1,4 @@
-const WIZARD_VERSION = "1.3.3";
+const WIZARD_VERSION = "1.3.4";
 // =============================================================================
 // Mehr Unified Deployment Wizard (Multi-Account & Auto-Stats Edition)
 // =============================================================================

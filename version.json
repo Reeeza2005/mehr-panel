@@ -1,9 +1,9 @@
 {
-  "version": "1.3.3",
+  "version": "1.3.4",
   "releaseDate": "2026-10-07",
   "features": [
-    "Fixed Trojan protocol header parsing and payload offset alignment",
-    "Resolved ReferenceError in edge node user cache",
-    "Full zero-local-dependency verification"
+    "Fixed Trojan & VLESS WebSocket Early Data decoding and response negotiation",
+    "Echoed Sec-WebSocket-Protocol header in 101 Switching Protocols response",
+    "Fully validated portable code structure"
   ]
 }

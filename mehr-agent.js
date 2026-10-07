@@ -664,7 +664,11 @@ function handleVlessWS(request, env, ctx) {
     if (ctx?.waitUntil) ctx.waitUntil(syncWithMaster(env, request, true));
   });
 
-  return new Response(null, { status: 101, webSocket: clientWs });
+  const responseHeaders = new Headers();
+  if (earlyDataHeader) {
+    responseHeaders.set("Sec-WebSocket-Protocol", earlyDataHeader);
+  }
+  return new Response(null, { status: 101, webSocket: clientWs, headers: responseHeaders });
 }
 
 export default {

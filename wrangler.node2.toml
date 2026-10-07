@@ -1,0 +1,15 @@
+account_id = "1ff650fafa5364732d872505e1add80f"
+name = "node-edge-2"
+main = "mehr-agent.js"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+[vars]
+PANEL_URL = "https://mehr.299u2reg6.workers.dev"
+CLUSTER_KEY = "mehr_cluster_secret_2026"
+NODE_ID = "node-2"
+
+[[services]]
+binding = "PANEL_SERVICE"
+service = "mehr"

@@ -1,4 +1,4 @@
-const WIZARD_VERSION = "1.3.1";
+const WIZARD_VERSION = "1.3.2";
 // =============================================================================
 // Mehr Unified Deployment Wizard (Multi-Account & Auto-Stats Edition)
 // =============================================================================
@@ -69,7 +69,7 @@ async function handleGetAccount(request) {
 // -----------------------------------------------------------------------------
 async function handleDeploy(request) {
     try {
-        const { apiToken, accountId, targetType, workerName, masterPanelUrl } = await request.json();
+        const { apiToken, accountId, targetType, workerName, masterPanelUrl, clusterKey } = await request.json();
         if (!apiToken || !accountId || !workerName || !targetType) {
             return jsonRes(false, "تمامی فیلدها الزامی هستند.");
         }
@@ -79,7 +79,7 @@ async function handleDeploy(request) {
         if (targetType === "master") {
             return await deployMasterPanel(apiToken, accountId, cleanName);
         } else if (targetType === "edge") {
-            return await deployEdgeNode(apiToken, accountId, cleanName, masterPanelUrl || "");
+            return await deployEdgeNode(apiToken, accountId, cleanName, masterPanelUrl || "", clusterKey || "");
         } else {
             return jsonRes(false, "نوع عملیات نامعتبر است.");
         }
@@ -182,26 +182,29 @@ async function deployMasterPanel(token, accountId, panelName) {
 // -----------------------------------------------------------------------------
 // ۲. استقرار نود لبه (Edge Ghost Node)
 // -----------------------------------------------------------------------------
-async function deployEdgeNode(token, accountId, nodeName, customMasterUrl = "") {
+async function deployEdgeNode(token, accountId, nodeName, customMasterUrl = "", customClusterKey = "") {
     const nodeApiKey = "mehr_sec_" + crypto.randomUUID().replace(/-/g, "") + "_" + Math.random().toString(36).substring(2, 10);
     const agentSource = await fetchFromGithub("mehr-agent.js");
 
     let masterUrl = customMasterUrl.trim().replace(/\/+$/, "");
-    let clusterSecret = "";
+    let clusterSecret = (customClusterKey || "").trim();
 
-    if (!masterUrl) {
-        try {
-            const d1Id = await getOrCreateD1(accountId, token, "super_panel_db");
-            const confRes = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/d1/database/${d1Id}/query`, {
-                method: "POST",
-                headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-                body: JSON.stringify({ sql: "SELECT value FROM kv_store WHERE key = 'sys_config';" })
-            });
-            const confData = await confRes.json();
-            const confRaw = confData?.result?.[0]?.results?.[0]?.value;
-            if (confRaw) {
-                const parsed = JSON.parse(confRaw);
-                if (parsed.clusterKey) clusterSecret = parsed.clusterKey;
+    // تلاش برای خواندن خودکار تنظیمات از دیتابیس D1 همین اکانت
+    try {
+        const d1Id = await getOrCreateD1(accountId, token, "super_panel_db");
+        const confRes = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/d1/database/${d1Id}/query`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ sql: "SELECT value FROM kv_store WHERE key = 'sys_config';" })
+        });
+        const confData = await confRes.json();
+        const confRaw = confData?.result?.[0]?.results?.[0]?.value;
+        if (confRaw) {
+            const parsed = JSON.parse(confRaw);
+            if (!clusterSecret && parsed.clusterKey) {
+                clusterSecret = parsed.clusterKey;
+            }
+            if (!masterUrl) {
                 const subRes = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/subdomain`, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
@@ -211,8 +214,8 @@ async function deployEdgeNode(token, accountId, nodeName, customMasterUrl = "") 
                     masterUrl = `https://${parsed.cfWorkerName}.${sub}.workers.dev`;
                 }
             }
-        } catch (e) {}
-    }
+        }
+    } catch (e) {}
 
     if (!masterUrl) {
         throw new Error("آدرس پنل مستر مشخص نیست. لطفاً آدرس پنل اصلی را در فرم وارد کنید.");
@@ -522,7 +525,13 @@ function getWizardHtml(version = WIZARD_VERSION) {
         <div class="field" id="masterUrlField" style="display:none;">
             <label>🌐 آدرس پنل اصلی مِهر (Master URL)</label>
             <input type="text" id="masterPanelUrl" placeholder="https://mehr.your-domain.workers.dev">
-            <span style="font-size: 11px; color: var(--text-muted); display: block; margin-top: 4px;">آدرس کامل پنل مستر که این نود فرعی باید به آن متصل شود.</span>
+            <span style="font-size: 11px; color: var(--text-muted); display: block; margin-top: 4px;">آدرس کامل پنل مستر (در صورت استقرار در اکانت یکسان، خالی بگذارید تا خودکار شناسایی شود).</span>
+        </div>
+
+        <div class="field" id="clusterKeyField" style="display:none;">
+            <label>🔑 کلید کلاستر پنل اصلی (Cluster Key)</label>
+            <input type="text" id="clusterKeyInput" placeholder="اختیاری در اکانت یکسان / الزامی برای اکانت مجزا">
+            <span style="font-size: 11px; color: var(--text-muted); display: block; margin-top: 4px;">در صورت نصب روی همین اکانت کلودفلر، سیستم کلید را خودکار از دیتابیس استخراج می‌کند.</span>
         </div>
 
         <div class="field">
@@ -668,11 +677,7 @@ function getWizardHtml(version = WIZARD_VERSION) {
                 return;
             }
 
-            if (targetType === "edge" && !masterPanelUrl) {
-                status.className = "status error";
-                status.innerText = "لطفاً آدرس پنل اصلی مِهر را وارد کنید.";
-                return;
-            }
+            const clusterKey = document.getElementById("clusterKeyInput") ? document.getElementById("clusterKeyInput").value.trim() : "";
 
             if (!detectedAccountId) {
                 await detectAccount();
@@ -698,7 +703,8 @@ function getWizardHtml(version = WIZARD_VERSION) {
                         accountId: detectedAccountId, 
                         targetType, 
                         workerName,
-                        masterPanelUrl 
+                        masterPanelUrl,
+                        clusterKey 
                     })
                 });
                 const data = await res.json();

@@ -1,6 +1,9 @@
 {
-  "version": "1.2.0",
-  "name": "Mehr Panel",
-  "protocol_support": ["VLESS", "Trojan"],
-  "updated_at": "2026-10-07"
+  "version": "1.3.0",
+  "releaseDate": "2026-10-07",
+  "features": [
+    "Full Trojan Protocol support with direct and chained routes",
+    "Autonomous dynamic Proxy Chain engine in Edge Nodes",
+    "Zero local-system dependency architecture"
+  ]
 }

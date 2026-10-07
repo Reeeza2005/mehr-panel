@@ -1,3 +1,23 @@
+function parseChainTarget(uri) {
+  if (!uri || typeof uri !== "string") return null;
+  try {
+    let cleanUri = uri.trim();
+    if (cleanUri.startsWith("vmess://")) {
+      const raw = atob(cleanUri.replace("vmess://", ""));
+      const j = JSON.parse(raw);
+      return { host: j.add || j.host, port: parseInt(j.port) || 443 };
+    }
+    if (cleanUri.includes("://")) {
+      const u = new URL(cleanUri);
+      return { host: u.hostname, port: parseInt(u.port) || 443 };
+    }
+    const parts = cleanUri.split(":");
+    return { host: parts[0], port: parseInt(parts[1]) || 443 };
+  } catch(e) {
+    return null;
+  }
+}
+
 
 async function forceSyncUsers(env) {
   try {
@@ -207,14 +227,7 @@ async function syncWithMaster(env, request, force = false) {
         if (data && data.upstream_uri) {
           try {
             const rawUri = data.upstream_uri.trim();
-            if (rawUri.startsWith("vless://")) {
-              const uPart = rawUri.slice(8);
-              const atIdx = uPart.indexOf("@");
-              const qIdx = uPart.indexOf("?");
-              const hPart = uPart.slice(atIdx + 1, qIdx !== -1 ? qIdx : undefined);
-              const cIdx = hPart.lastIndexOf(":");
-              activeUpstreamTarget = null;
-            }
+            activeUpstreamTarget = parseChainTarget(rawUri);
           } catch(e) { activeUpstreamTarget = null; }
         } else if (data && !data.upstream_uri) {
           activeUpstreamTarget = null;
@@ -497,17 +510,20 @@ async function establishSocketWithProxy(socketHolder, targetHost, targetPort, ra
 
   try {
     
-    let isUpstreamReq = false;
+    let chainTarget = null;
     try {
       const reqUrl = new URL(request?.url || "https://node.internal");
-      if (reqUrl.searchParams.get("upstream") === "true" || reqUrl.pathname.includes("upstream=true")) {
-        isUpstreamReq = true;
+      const chainParam = reqUrl.searchParams.get("chain");
+      if (chainParam) {
+        chainTarget = parseChainTarget(decodeURIComponent(chainParam));
+      } else if (reqUrl.searchParams.get("upstream") === "true" || reqUrl.pathname.includes("upstream=true")) {
+        chainTarget = activeUpstreamTarget;
       }
     } catch(e) {}
-    const useUpstreamHere = isUpstreamReq || (activeUpstreamTarget !== null);
 
-    const destHost = targetHost;
-    const destPort = targetPort;
+    const selectedTarget = chainTarget || activeUpstreamTarget;
+    const destHost = selectedTarget ? selectedTarget.host : targetHost;
+    const destPort = selectedTarget ? selectedTarget.port : targetPort;
     sock = connect({ hostname: destHost, port: destPort });
     socketHolder.value = sock;
 

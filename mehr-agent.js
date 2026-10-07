@@ -1,3 +1,38 @@
+
+async function forceSyncUsers(env) {
+  try {
+    const targetUrl = (env.PANEL_URL || "https://mehr.299u2reg6.workers.dev").replace(/\/+$/, "") + "/api/node/sync";
+    const key = env.CLUSTER_KEY || "mehr_cluster_secret_2026";
+    const headers = {
+      "Content-Type": "application/json",
+      "X-Node-Key": key,
+      "Authorization": "Bearer " + key
+    };
+    const body = JSON.stringify({
+      node_id: env.NODE_ID || "node-2",
+      timestamp: Date.now(),
+      requests: 0
+    });
+
+    let res = null;
+    if (env.PANEL_SERVICE && typeof env.PANEL_SERVICE.fetch === "function") {
+      res = await env.PANEL_SERVICE.fetch(targetUrl, { method: "POST", headers, body });
+    }
+    if (!res || !res.ok) {
+      res = await fetch(targetUrl, { method: "POST", headers, body });
+    }
+    if (res && res.ok) {
+      const data = await res.json();
+      if (data && Array.isArray(data.allowed_uuids)) {
+        cachedAllowedUsers = new Set(data.allowed_uuids.map(x => String(x).toLowerCase()));
+        updateTrojanCache(data.allowed_uuids);
+        return true;
+      }
+    }
+  } catch (err) {}
+  return false;
+}
+
 let activeUpstreamTarget = null;
 async function getEdgeNodeCFUsage(env) {
   const accountId = env.CF_ACCOUNT_ID;
@@ -100,39 +135,63 @@ async function syncWithMaster(env, request, force = false) {
     }
 
     // اگر نه ترافیکی بود، نه استعلام کلادفلر و نه فورس، ریترن کن
-    if (trafficSnapshot.length === 0 && finalRequests === 0 && !force) {
+    const needInitialSync = (cachedAllowedUsers.size === 0 || trojanHashToUuid.size === 0);
+    if (trafficSnapshot.length === 0 && finalRequests === 0 && !force && !needInitialSync) {
       return;
     }
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 10000);
 
-    const res = await fetch(`${panelUrl.replace(/\/+$/, "")}/api/node/sync`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Node-Key": nodeKey,
-        "Authorization": `Bearer ${nodeKey}`
-      },
-      
-      
+    const targetSyncUrl = `${panelUrl.replace(/\/+$/, "")}/api/node/sync`;
+    const syncHeaders = {
+      "Content-Type": "application/json",
+      "X-Node-Key": nodeKey,
+      "Authorization": `Bearer ${nodeKey}`
+    };
+    const syncBody = JSON.stringify({
+      node_id: env.NODE_ID || (new URL(request?.url || "https://node.internal").hostname.split(".")[0]),
+      timestamp: now,
+      requests: finalRequests,
+      requests_count: finalRequests,
+      requests_delta: finalRequests,
+      daily_requests: finalRequests,
+      country: detectedCountry || "US",
+      user_traffic: trafficSnapshot
+    });
 
-      body: JSON.stringify({
-        node_id: env.NODE_ID || (new URL(request?.url || "https://node.internal").hostname.split(".")[0]),
-        timestamp: now,
-        requests: finalRequests,
-        requests_count: finalRequests,
-        requests_delta: finalRequests,
-        daily_requests: finalRequests,
-        country: detectedCountry || "US",
-        user_traffic: trafficSnapshot
-      }),
-      signal: controller.signal
-    }).catch(() => null);
+    let res = null;
+    try {
+      if (env.PANEL_SERVICE && typeof env.PANEL_SERVICE.fetch === "function") {
+        res = await env.PANEL_SERVICE.fetch(targetSyncUrl, {
+          method: "POST",
+          headers: syncHeaders,
+          body: syncBody
+        });
+      } else {
+        res = await fetch(targetSyncUrl, {
+          method: "POST",
+          headers: syncHeaders,
+          body: syncBody
+        });
+      }
+    } catch (err) {
+      console.error("SYNC_DISPATCH_ERROR:", err?.message || err);
+      try {
+        res = await fetch(targetSyncUrl, {
+          method: "POST",
+          headers: syncHeaders,
+          body: syncBody
+        });
+      } catch (e2) {
+        res = null;
+      }
+    }
 
     clearTimeout(timer);
 
     if (res && res.ok) {
+      console.log(`[SYNC] Master response OK (${res.status})`);
       for (const item of trafficSnapshot) {
         const cur = pendingUserTraffic.get(item.uuid);
         if (cur) {
@@ -154,15 +213,13 @@ async function syncWithMaster(env, request, force = false) {
               const qIdx = uPart.indexOf("?");
               const hPart = uPart.slice(atIdx + 1, qIdx !== -1 ? qIdx : undefined);
               const cIdx = hPart.lastIndexOf(":");
-              activeUpstreamTarget = {
-                host: cIdx !== -1 ? hPart.slice(0, cIdx) : hPart,
-                port: cIdx !== -1 ? parseInt(hPart.slice(cIdx + 1)) : 443
-              };
+              activeUpstreamTarget = null;
             }
           } catch(e) { activeUpstreamTarget = null; }
         } else if (data && !data.upstream_uri) {
           activeUpstreamTarget = null;
         }
+      console.log(`[SYNC] Payload received: allowed=${data?.allowed_uuids?.length || 0}`);
       if (data) {
         if (Array.isArray(data.allowed_uuids)) {
           cachedAllowedUsers = new Set(data.allowed_uuids.map(x => String(x).toLowerCase()));
@@ -321,10 +378,17 @@ function parseTrojanHeader(buffer) {
   if (ePos === -1) return { hasError: true, message: "crlf not found in trojan header" };
 
   const clientHashHex = new TextDecoder().decode(view.slice(0, ePos)).toLowerCase().trim();
-  const matchedUuid = trojanHashToUuid.get(clientHashHex);
+  let matchedUuid = trojanHashToUuid.get(clientHashHex);
 
   if (!matchedUuid) {
-    return { hasError: true, message: "trojan unauthorized" };
+    if (cachedAllowedUsers.size > 0 && trojanHashToUuid.size === 0) {
+    updateTrojanCache(Array.from(cachedAllowedUsers));
+    matchedUuid = trojanHashToUuid.get(clientHashHex);
+    if (matchedUuid) {
+      return { hasError: false, uuid: matchedUuid, addressRemote, portRemote, rawPayloadIndex: ePos + 2, rawDataIndex: ePos + 2, rawBuffer: chunk };
+    }
+  }
+  return { hasError: true, message: `trojan unauthorized (hash:${clientHashHex.slice(0, 8)}... cache_sz:${trojanHashToUuid.size})` };
   }
   if (cachedBlockedUsers.size > 0 && cachedBlockedUsers.has(matchedUuid)) {
     return { hasError: true, message: "user blocked" };
@@ -442,8 +506,8 @@ async function establishSocketWithProxy(socketHolder, targetHost, targetPort, ra
     } catch(e) {}
     const useUpstreamHere = isUpstreamReq || (activeUpstreamTarget !== null);
 
-    const destHost = (useUpstreamHere && activeUpstreamTarget) ? activeUpstreamTarget.host : targetHost;
-    const destPort = (useUpstreamHere && activeUpstreamTarget) ? activeUpstreamTarget.port : targetPort;
+    const destHost = targetHost;
+    const destPort = targetPort;
     sock = connect({ hostname: destHost, port: destPort });
     socketHolder.value = sock;
 
@@ -453,6 +517,7 @@ async function establishSocketWithProxy(socketHolder, targetHost, targetPort, ra
       writer.releaseLock();
     }
   } catch (directErr) {
+    console.error("DIRECT_CONNECT_ERROR:", directErr?.message || directErr);
     try {
       if (proxyIP) {
         sock = connect({ hostname: proxyIP, port: targetPort === 443 ? 443 : 80 });
@@ -466,7 +531,7 @@ async function establishSocketWithProxy(socketHolder, targetHost, targetPort, ra
         throw directErr;
       }
     } catch (proxyErr) {
-      safeCloseWebSocket(ws);
+      try { ws.close(1011, "ERR_CONNECT:" + (proxyErr?.message || "failed")); } catch {}
       return;
     }
   }
@@ -534,9 +599,13 @@ function handleVlessWS(request, env, ctx) {
 
       const firstByte = new Uint8Array(chunk)[0];
       const isVless = (firstByte === 0x00);
-      const parsed = isVless ? parseVlessHeader(chunk) : parseTrojanHeader(chunk);
+      let parsed = isVless ? parseVlessHeader(chunk) : parseTrojanHeader(chunk);
+      if (parsed.hasError && !isVless && trojanHashToUuid.size === 0) {
+        try { await syncWithMaster(env, request, true); } catch(e) {}
+        parsed = parseTrojanHeader(chunk);
+      }
       if (parsed.hasError) {
-        safeCloseWebSocket(serverWs);
+        try { serverWs.close(1008, "ERR_PARSE:" + parsed.message); } catch {}
         return;
       }
 
@@ -593,7 +662,10 @@ export default {
 
     if (isWebSocket) {
       pendingRequestsCount++;
-      if (cachedAllowedUsers.size === 0) {
+      if (trojanHashToUuid.size === 0 || cachedAllowedUsers.size === 0) {
+        await forceSyncUsers(env);
+      }
+      if (trojanHashToUuid.size === 0 || cachedAllowedUsers.size === 0) {
         try { await syncWithMaster(env, request, true); } catch(e) {}
       }
       return handleVlessWS(request, env, ctx);

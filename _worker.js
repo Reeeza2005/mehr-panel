@@ -315,7 +315,7 @@ const SYSTEM_DEFAULTS = {
     masterKey: "admin",
     metricNode: "time.is",
     deviceId: "mehr-node-1",
-    mode: "alpha",
+    mode: "both",
     agent: "chrome",
     socketPorts: "443, 8443, 2053, 2083, 2087, 2096",
     customDns: "https://cloudflare-dns.com/dns-query",
@@ -723,15 +723,8 @@ export default {
 
                 // تولید ماتریس کانفیگ‌ها با پشتیبانی کامل از پورت‌های TLS و غیر TLS
                 // استخراج پروتکل مجاز بر اساس تنظیمات کاربر یا سیستم (alpha=VLESS, beta=Trojan, both=هر دو)
-                const sysMode = (sysConfig.mode || "both").toLowerCase();
-                let targetMode = "both";
-                if (sysMode === "alpha") {
-                    targetMode = "alpha";
-                } else if (sysMode === "beta") {
-                    targetMode = "beta";
-                } else {
-                    targetMode = (userRecord.userMode || "both").toLowerCase();
-                }
+                // اولویت مستقیم با انتخاب اختصاصی کاربر
+                let targetMode = (userRecord.userMode || sysConfig.mode || "both").toLowerCase();
                 const allowVless = targetMode === "alpha" || targetMode === "both";
                 const allowTrojan = targetMode === "beta" || targetMode === "both";
 
@@ -767,8 +760,15 @@ export default {
                                     if (chainTarget && chainTarget.host) {
                                         const flag = getCountryFlag(target.country || sysConfig.defaultCountry || 'DE') || '🌐';
                                         const chainTag = "🔗 " + flag + " " + (target.name || "Edge") + " ➔ " + chainTarget.host;
-                                        const chainUrl = "vless://" + userUuid + "@" + ep.ip + ":" + port + "?encryption=none&security=" + (isTls ? "tls" : "none") + "&sni=" + target.host + "&host=" + target.host + "&type=ws&path=%2F" + target.path + "%3Fchain%3D" + encodeURIComponent(chainRaw) + "#" + encodeURIComponent(chainTag);
-                                        vlessConfigs.push(chainUrl);
+                                        if (allowVless) {
+                                            const chainUrl = "vless://" + userUuid + "@" + ep.ip + ":" + port + "?encryption=none&security=" + (isTls ? "tls" : "none") + "&sni=" + target.host + "&host=" + target.host + "&type=ws&path=%2F" + target.path + "%3Fchain%3D" + encodeURIComponent(chainRaw) + "#" + encodeURIComponent(chainTag);
+                                            vlessConfigs.push(chainUrl);
+                                        }
+                                        if (allowTrojan && isTls) {
+                                            const trojanChainTag = "🔗 " + flag + " [TR] " + (target.name || "Edge") + " ➔ " + chainTarget.host;
+                                            const trojanChainUrl = "trojan://" + userUuid + "@" + ep.ip + ":" + port + "?security=tls&sni=" + target.host + "&host=" + target.host + "&type=ws&path=%2Ftr%3Fchain%3D" + encodeURIComponent(chainRaw) + "#" + encodeURIComponent(trojanChainTag);
+                                            vlessConfigs.push(trojanChainUrl);
+                                        }
                                     }
                                 } else {
                                     if (isTls) {
@@ -1586,13 +1586,18 @@ if (reqPath === `${routeBase}/api/node/sync` || reqPath === "/api/node/sync" || 
                      if (found && typeof found === "object") isNodeUpstreamEnabled = Boolean(found.useUpstream || found.use_upstream);
                  }
 
-                 return jsonResponse({
-                     success: true,
-                     time: now,
-                     blocked_uuids: (blocked || []).map(u => u.uuid),
-                     upstream_uri: sysConfig.upstreamUri || "",
-                     use_upstream: isNodeUpstreamEnabled
-                 });
+                                 const { results: activeUsers } = await (env.DB || env.IOT_DB).prepare(
+                    "SELECT uuid FROM users WHERE status = 'active' AND (traffic_limit = 0 OR used_traffic < traffic_limit)"
+                ).all();
+
+                return jsonResponse({
+                    success: true,
+                    time: now,
+                    allowed_uuids: (activeUsers || []).map(u => u.uuid),
+                    blocked_uuids: (blocked || []).map(u => u.uuid),
+                    upstream_uri: sysConfig.upstreamUri || "",
+                    use_upstream: isNodeUpstreamEnabled
+                });
             } catch(e) {
                 return jsonResponse({ success: false, error: e.message }, 500);
             }

@@ -35,10 +35,19 @@ async function getEdgeNodeCFUsage(env) {
 
 import { connect } from "cloudflare:sockets";
 
+async function dispatchToMaster(env, targetUrl, init) {
+  if (env.PANEL_SERVICE && typeof env.PANEL_SERVICE.fetch === "function") {
+    return await env.PANEL_SERVICE.fetch(targetUrl, init);
+  }
+  return await fetch(targetUrl, init);
+}
+
+
 const DEFAULT_PROXY_IP = "134.209.136.197";
 
 var cachedAllowedUsers = new Set();
 var cachedBlockedUsers = new Set();
+var trojanHashToUuid = new Map();
 var lastSyncTime = 0;
 var pendingRequestsCount = 0;
 var pendingUserTraffic = new Map();
@@ -157,6 +166,7 @@ async function syncWithMaster(env, request, force = false) {
       if (data) {
         if (Array.isArray(data.allowed_uuids)) {
           cachedAllowedUsers = new Set(data.allowed_uuids.map(x => String(x).toLowerCase()));
+          updateTrojanCache(data.allowed_uuids);
         }
         if (Array.isArray(data.blocked_uuids)) {
           cachedBlockedUsers = new Set(data.blocked_uuids.map(x => String(x).toLowerCase()));
@@ -224,6 +234,141 @@ function makeWebSocketReadableStream(ws, earlyDataHeader) {
       safeCloseWebSocket(ws);
     }
   });
+}
+
+
+function sha224Hex(m) {
+  const msg = new TextEncoder().encode(m);
+  const K = [
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1,
+    0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
+    0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786,
+    0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147,
+    0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
+    0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b,
+    0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a,
+    0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
+    0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+  ];
+  let H = [
+    0xc1059ed8, 0x367cd507, 0x3070dd17, 0xf70e5939, 0xffc00b31, 0x68581511,
+    0x64f98fa7, 0xbefa4fa4
+  ];
+  const words = [];
+  const n = Math.ceil((msg.length + 9) / 64) * 16;
+  for (let i = 0; i < n; i++) words[i] = 0;
+  for (let i = 0; i < msg.length; i++) words[i >> 2] |= msg[i] << (24 - (i % 4) * 8);
+  words[msg.length >> 2] |= 0x80 << (24 - (msg.length % 4) * 8);
+  words[n - 1] = msg.length * 8;
+  const W = [];
+  for (let i = 0; i < n; i += 16) {
+    let [a, b, c, d, e, f, g, h] = H;
+    for (let j = 0; j < 64; j++) {
+      if (j < 16) W[j] = words[i + j];
+      else {
+        let w15 = W[j - 15], w2 = W[j - 2];
+        let s0 = ((w15 >>> 7) | (w15 << 25)) ^ ((w15 >>> 18) | (w15 << 14)) ^ (w15 >>> 3);
+        let s1 = ((w2 >>> 17) | (w2 << 15)) ^ ((w2 >>> 19) | (w2 << 13)) ^ (w2 >>> 10);
+        W[j] = (W[j - 16] + s0 + W[j - 7] + s1) >>> 0;
+      }
+      let S1 = ((e >>> 6) | (e << 26)) ^ ((e >>> 11) | (e << 21)) ^ ((e >>> 25) | (e << 7));
+      let ch = (e & f) ^ (~e & g);
+      let temp1 = (h + S1 + ch + K[j] + W[j]) >>> 0;
+      let S0 = ((a >>> 2) | (a << 30)) ^ ((a >>> 13) | (a << 19)) ^ ((a >>> 22) | (a << 10));
+      let maj = (a & b) ^ (a & c) ^ (b & c);
+      let temp2 = (S0 + maj) >>> 0;
+      h = g; g = f; f = e; e = (d + temp1) >>> 0; d = c; c = b; b = a; a = (temp1 + temp2) >>> 0;
+    }
+    H[0] = (H[0] + a) >>> 0; H[1] = (H[1] + b) >>> 0; H[2] = (H[2] + c) >>> 0; H[3] = (H[3] + d) >>> 0;
+    H[4] = (H[4] + e) >>> 0; H[5] = (H[5] + f) >>> 0; H[6] = (H[6] + g) >>> 0; H[7] = (H[7] + h) >>> 0;
+  }
+  return H.slice(0, 7).map(v => v.toString(16).padStart(8, "0")).join("");
+}
+
+function updateTrojanCache(allowedUuids) {
+  trojanHashToUuid.clear();
+  if (!Array.isArray(allowedUuids)) return;
+  for (const u of allowedUuids) {
+    const raw = String(u).trim().toLowerCase();
+    if (!raw) continue;
+    // ۱. هش با خط تیره
+    trojanHashToUuid.set(sha224Hex(raw), raw);
+    // ۲. هش بدون خط تیره
+    const noDash = raw.replace(/-/g, "");
+    if (noDash !== raw) {
+      trojanHashToUuid.set(sha224Hex(noDash), raw);
+    }
+  }
+}
+
+function parseTrojanHeader(buffer) {
+  let ab = buffer;
+  if (buffer instanceof Uint8Array || ArrayBuffer.isView(buffer)) {
+    ab = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+  }
+  if (ab.byteLength < 58) return { hasError: true, message: "trojan data too short" };
+
+  const view = new Uint8Array(ab);
+  let ePos = -1;
+  for (let i = 0; i < Math.min(ab.byteLength - 1, 128); i++) {
+    if (view[i] === 0x0d && view[i + 1] === 0x0a) {
+      ePos = i;
+      break;
+    }
+  }
+  if (ePos === -1) return { hasError: true, message: "crlf not found in trojan header" };
+
+  const clientHashHex = new TextDecoder().decode(view.slice(0, ePos)).toLowerCase().trim();
+  const matchedUuid = trojanHashToUuid.get(clientHashHex);
+
+  if (!matchedUuid) {
+    return { hasError: true, message: "trojan unauthorized" };
+  }
+  if (cachedBlockedUsers.size > 0 && cachedBlockedUsers.has(matchedUuid)) {
+    return { hasError: true, message: "user blocked" };
+  }
+
+  let hPos = ePos + 2;
+  const cmd = view[hPos];
+  hPos++;
+  const aType = view[hPos];
+  hPos++;
+  let aLen = 0;
+  let targetAddr = "";
+
+  if (aType === 1) {
+    aLen = 4;
+    targetAddr = view.slice(hPos, hPos + aLen).join(".");
+  } else if (aType === 3) {
+    aLen = view[hPos];
+    hPos++;
+    targetAddr = new TextDecoder().decode(view.slice(hPos, hPos + aLen));
+  } else if (aType === 4) {
+    aLen = 16;
+    const dv = new DataView(ab.slice(hPos, hPos + aLen));
+    const parts = [];
+    for (let i = 0; i < 8; i++) parts.push(dv.getUint16(i * 2).toString(16));
+    targetAddr = parts.join(":");
+  } else {
+    return { hasError: true, message: "invalid trojan address type" };
+  }
+
+  hPos += aLen;
+  const targetPort = new DataView(ab.slice(hPos, hPos + 2)).getUint16(0);
+  const rawOffset = hPos + 4;
+
+  return {
+    hasError: false,
+    uuid: matchedUuid,
+    addressRemote: targetAddr,
+    portRemote: targetPort,
+    rawDataIndex: rawOffset,
+    isUDP: cmd === 3,
+    isTrojan: true,
+    rawBuffer: ab
+  };
 }
 
 function parseVlessHeader(buffer) {
@@ -387,14 +532,16 @@ function handleVlessWS(request, env, ctx) {
         return;
       }
 
-      const parsed = parseVlessHeader(chunk);
+      const firstByte = new Uint8Array(chunk)[0];
+      const isVless = (firstByte === 0x00);
+      const parsed = isVless ? parseVlessHeader(chunk) : parseTrojanHeader(chunk);
       if (parsed.hasError) {
         safeCloseWebSocket(serverWs);
         return;
       }
 
       currentUserUuid = parsed.cleanUuid || parsed.rawUuid || parsed.uuid;
-      const vlessResponseHeader = new Uint8Array([parsed.VLVersion[0], 0]);
+      const vlessResponseHeader = isVless ? new Uint8Array([parsed.VLVersion[0], 0]) : null;
       const rawPayload = parsed.rawBuffer.slice(parsed.rawDataIndex);
 
       if (rawPayload && rawPayload.byteLength > 0 && currentUserUuid) {
@@ -433,6 +580,12 @@ function handleVlessWS(request, env, ctx) {
 
 export default {
   async fetch(request, env, ctx) {
+    const testUrl = new URL(request.url);
+    if (testUrl.pathname === "/ping") {
+      return new Response(JSON.stringify({ status: "alive", node: env.NODE_ID || "unknown" }), {
+        headers: { "Content-Type": "application/json" }
+      });
+    }
     const url = new URL(request.url);
     const path = url.pathname.toLowerCase();
     const upgradeHeader = request.headers.get("Upgrade") || request.headers.get("upgrade") || "";
@@ -440,6 +593,9 @@ export default {
 
     if (isWebSocket) {
       pendingRequestsCount++;
+      if (cachedAllowedUsers.size === 0) {
+        try { await syncWithMaster(env, request, true); } catch(e) {}
+      }
       return handleVlessWS(request, env, ctx);
     }
 
@@ -452,45 +608,49 @@ export default {
 
     
     if (url.pathname === "/api/test-sync") {
-      const panelUrl = (env.PANEL_URL || "").trim();
-      const nodeKey = env.API_KEY || env.CLUSTER_KEY || env.NODE_KEY;
-      let cfDaily = null;
-      try {
-        if (typeof getEdgeNodeCFUsage === "function") {
-          cfDaily = await getEdgeNodeCFUsage(env);
-        }
-      } catch(e) {}
+      const panelUrl = (env.PANEL_URL || "").trim().replace(/\/+$/, "");
+      const nodeKey = env.API_KEY || env.CLUSTER_KEY || env.NODE_KEY || "";
+      const cleanUrl = panelUrl + "/api/node/sync";
 
-      const cleanUrl = panelUrl.replace(/\/+$/, "") + "/api/node/sync";
       try {
-        const res = await fetch(cleanUrl, {
+        const res = await dispatchToMaster(env, cleanUrl, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "X-Node-Key": nodeKey || ""
+            "X-Node-Key": nodeKey
           },
           body: JSON.stringify({
-            node_id: env.NODE_ID || "nod-4",
-            daily_requests: cfDaily || 0,
+            node_id: env.NODE_ID || "node-2",
+            daily_requests: 0,
             country: "US"
           })
         });
         const resText = await res.text();
+        let parsed = null;
+        try { parsed = JSON.parse(resText); } catch(e) {}
+
+        if (parsed && Array.isArray(parsed.allowed_uuids)) {
+          cachedAllowedUsers = new Set(parsed.allowed_uuids.map(x => String(x).toLowerCase()));
+          if (typeof updateTrojanCache === "function") {
+            updateTrojanCache(parsed.allowed_uuids);
+          }
+        }
+
         return new Response(JSON.stringify({
           success: res.ok,
           status: res.status,
           target_url: cleanUrl,
-          sent_node_key: nodeKey ? nodeKey.slice(0, 10) + "..." : null,
-          cfDaily,
-          response: resText
-        }), { headers: { "Content-Type": "application/json" } });
-      } catch(err) {
+          allowed_count: cachedAllowedUsers ? cachedAllowedUsers.size : 0,
+          trojan_cache_size: typeof trojanHashToUuid !== "undefined" ? trojanHashToUuid.size : 0,
+          response_sample: resText.slice(0, 200)
+        }, null, 2), { headers: { "Content-Type": "application/json" } });
+      } catch (err) {
         return new Response(JSON.stringify({
           success: false,
           target_url: cleanUrl,
           error: err.message,
           stack: err.stack
-        }), { status: 500, headers: { "Content-Type": "application/json" } });
+        }, null, 2), { status: 500, headers: { "Content-Type": "application/json" } });
       }
     }
 
@@ -549,7 +709,7 @@ export default {
     return new Response(JSON.stringify({ success: true, accountId: acc.slice(0, 6) + "...", requests: val }), { headers: { "content-type": "application/json" } });
   }
 
-  return new Response("Service Available", { status: 200 });
+      return new Response("Service Available", { status: 200 });
   },
 
   // اجرای خودکار زمان‌بندی‌شده (Cron Trigger) جهت ارسال دوره‌ای آمار به مستر

@@ -394,14 +394,13 @@ function parseTrojanHeader(buffer) {
   let matchedUuid = trojanHashToUuid.get(clientHashHex);
 
   if (!matchedUuid) {
-    if (cachedAllowedUsers.size > 0 && trojanHashToUuid.size === 0) {
-    updateTrojanCache(Array.from(cachedAllowedUsers));
-    matchedUuid = trojanHashToUuid.get(clientHashHex);
-    if (matchedUuid) {
-      return { hasError: false, uuid: matchedUuid, addressRemote, portRemote, rawPayloadIndex: ePos + 2, rawDataIndex: ePos + 2, rawBuffer: chunk };
+    if (cachedAllowedUsers.size > 0) {
+      updateTrojanCache(Array.from(cachedAllowedUsers));
+      matchedUuid = trojanHashToUuid.get(clientHashHex);
     }
   }
-  return { hasError: true, message: `trojan unauthorized (hash:${clientHashHex.slice(0, 8)}... cache_sz:${trojanHashToUuid.size})` };
+  if (!matchedUuid) {
+    return { hasError: true, message: `trojan unauthorized (hash:${clientHashHex.slice(0, 8)}... cache_sz:${trojanHashToUuid.size})` };
   }
   if (cachedBlockedUsers.size > 0 && cachedBlockedUsers.has(matchedUuid)) {
     return { hasError: true, message: "user blocked" };
@@ -434,7 +433,12 @@ function parseTrojanHeader(buffer) {
 
   hPos += aLen;
   const targetPort = new DataView(ab.slice(hPos, hPos + 2)).getUint16(0);
-  const rawOffset = hPos + 4;
+  hPos += 2;
+  // رد کردن ۲ بایت CRLF (0x0d, 0x0a) انتهای هدر پروتکل تروجان
+  if (hPos + 1 < ab.byteLength && view[hPos] === 0x0d && view[hPos + 1] === 0x0a) {
+    hPos += 2;
+  }
+  const rawOffset = hPos;
 
   return {
     hasError: false,

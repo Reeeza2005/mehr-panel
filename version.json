@@ -1,6 +1,9 @@
 {
   "version": "1.6.1",
-  "name": "Mehr Panel",
-  "codename": "Autonomous-Edge",
+  "components": {
+    "wizard": "1.6.1",
+    "agent": "1.6.1",
+    "master": "1.5.7"
+  },
   "updated_at": "2026-10-08"
 }

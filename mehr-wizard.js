@@ -268,7 +268,6 @@ async function deployEdgeNode(token, accountId, nodeName) {
     const metadata = {
         main_module: "worker.js",
         compatibility_date: "2024-09-01",
-        compatibility_flags: ["nodejs_compat"],
         bindings: edgeBindings
     };
 
@@ -324,11 +323,13 @@ async function getOrCreateD1(accountId, token, dbName) {
 }
 
 async function fetchFromGithub(filePath) {
-    const rawUrl = `https://raw.githubusercontent.com/${CORE_REPO}/${CORE_BRANCH}/${filePath}?_t=${Date.now()}`;
+    const rawUrl = `https://raw.githubusercontent.com/${CORE_REPO}/${CORE_BRANCH}/${filePath}?_nocache=${Date.now()}_${Math.random()}`;
     const res = await fetch(rawUrl, {
         headers: {
             "User-Agent": "Mehr-Wizard-Installer",
             "Accept": "text/plain",
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
             "Cache-Control": "no-cache, no-store, must-revalidate",
             "Pragma": "no-cache"
         }

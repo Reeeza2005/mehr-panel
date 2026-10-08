@@ -1,4 +1,4 @@
-const WIZARD_VERSION = "1.4.0";
+const WIZARD_VERSION = "1.5.0";
 // =============================================================================
 // Mehr Autonomous Deployment Wizard (Standalone Master & Edge Architecture)
 // =============================================================================

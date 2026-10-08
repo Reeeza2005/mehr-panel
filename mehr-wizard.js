@@ -739,5 +739,11 @@ async function ensureSubdomainAndEnableRoute(accountId, token, scriptName) {
         });
     } catch (e) {}
 
-    return `https://${scriptName}.${subdomain}.workers.dev`;
+    const base = `https://${scriptName}.${subdomain}.workers.dev`;
+    return isMasterPanel ? `${base}/sync/dash` : base;
+}
+
+
+async function getWorkerUrl(accountId, token, scriptName, isMasterPanel = false) {
+    return await ensureSubdomainAndEnableRoute(accountId, token, scriptName, isMasterPanel);
 }

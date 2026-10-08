@@ -1,6 +1,6 @@
 import { connect } from "cloudflare:sockets";
 
-const AGENT_VERSION = "1.5.9";
+const AGENT_VERSION = "1.6.0";
 const DEFAULT_PROXY_IP = "bpb.yousefi.isegaro.com";
 
 function safeCloseWebSocket(ws) {
@@ -45,7 +45,7 @@ function makeWebSocketReadableStream(ws, earlyDataHeader) {
 }
 
 // -------------------------------------------------------------
-// ۱. پارس هدر VLESS
+// پارس هدر VLESS
 // -------------------------------------------------------------
 function parseVlessHeader(buffer) {
   if (buffer.byteLength < 24) return { hasError: true, message: "Invalid VLESS header size" };
@@ -53,18 +53,18 @@ function parseVlessHeader(buffer) {
   const optLength = new Uint8Array(buffer.slice(17, 18))[0];
   const cmd = new Uint8Array(buffer.slice(18 + optLength, 18 + optLength + 1))[0];
   const isUDP = cmd === 2;
-  
+
   if (cmd !== 1 && cmd !== 2) {
     return { hasError: true, message: "Unsupported VLESS command: " + cmd };
   }
 
   const portIdx = 18 + optLength + 1;
   const port = new DataView(buffer.slice(portIdx, portIdx + 2)).getUint16(0);
-  
+
   let addrIdx = portIdx + 2;
   const addrType = new Uint8Array(buffer.slice(addrIdx, addrIdx + 1))[0];
   addrIdx += 1;
-  
+
   let address = "";
   let rawDataIdx = 0;
 
@@ -98,23 +98,23 @@ function parseVlessHeader(buffer) {
 }
 
 // -------------------------------------------------------------
-// ۲. پارس هدر Trojan (کپی دقیق و بهینه‌شده از تابع Io در سورس BPB)
+// پارس هدر Trojan (منطبق بر سورس مرجع BPB Io)
 // -------------------------------------------------------------
 function parseTrojanHeader(buffer) {
-  if (buffer.byteLength < 58) return { hasError: true, message: "Invalid Trojan header size" };
-  
+  if (buffer.byteLength < 56) return { hasError: true, message: "Invalid Trojan buffer length" };
+
   const cr = new Uint8Array(buffer.slice(56, 57))[0];
   const lf = new Uint8Array(buffer.slice(57, 58))[0];
   if (cr !== 13 || lf !== 10) {
-    return { hasError: true, message: "Invalid Trojan header format (missing CR LF)" };
+    return { hasError: true, message: "Invalid Trojan CRLF delimiter" };
   }
 
   const socks5 = buffer.slice(58);
-  if (socks5.byteLength < 6) return { hasError: true, message: "Invalid Trojan SOCKS5 request data" };
-  
+  if (socks5.byteLength < 6) return { hasError: true, message: "Invalid SOCKS5 frame" };
+
   const view = new DataView(socks5);
   const cmd = view.getUint8(0);
-  if (cmd !== 1) return { hasError: true, message: "Unsupported Trojan command, only TCP allowed: " + cmd };
+  if (cmd !== 1) return { hasError: true, message: "Unsupported Trojan command: " + cmd };
 
   const addrType = view.getUint8(1);
   let addrLen = 0;
@@ -138,13 +138,10 @@ function parseTrojanHeader(buffer) {
     return { hasError: true, message: "Invalid Trojan addressType: " + addrType };
   }
 
-  if (!address) return { hasError: true, message: "Trojan destination address is empty" };
-
   const portOffset = offset + addrLen;
   const port = new DataView(socks5.slice(portOffset, portOffset + 2)).getUint16(0);
-  
-  // در پروتکل تروجان بعد از ۲ بایت پورت، ۲ بایت CRLF (0x0D 0x0A) قرار دارد
-  // پس آفست دیتای اصلی کلاینت = ۵۸ (شروع ساکس) + portOffset + ۲ (پورت) + ۲ (CRLF)
+
+  // در تروجان بعد از پورت ۲ بایت CRLF قرار دارد: offset + 2 (port) + 2 (CRLF) = portOffset + 4
   const rawDataIdx = 58 + portOffset + 4;
 
   return {
@@ -158,7 +155,7 @@ function parseTrojanHeader(buffer) {
   };
 }
 
-// تشخیص هوشمند پروتکل
+// تشخیص خودکار پروتکل بر مبنای هدر بسته
 function parseProxyHeader(buffer) {
   if (buffer.byteLength >= 58) {
     const cr = new Uint8Array(buffer.slice(56, 57))[0];
@@ -223,7 +220,7 @@ async function handleProxyWebSocket(request) {
         throw new Error(parsed.message);
       }
 
-      const clientData = chunk.slice(parsed.rawDataIndex);
+      const clientData = chunk.byteLength >= parsed.rawDataIndex ? chunk.slice(parsed.rawDataIndex) : new ArrayBuffer(0);
       const respHeader = parsed.protocol === "vless" ? new Uint8Array([parsed.version[0], 0]) : null;
 
       let sock;

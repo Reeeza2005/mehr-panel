@@ -251,7 +251,7 @@ async function deployMasterPanel(token, accountId, panelName) {
 // ۲. استقرار نود لبه کاملاً مستقل (Autonomous Edge Node)
 // -----------------------------------------------------------------------------
 async function deployEdgeNode(token, accountId, nodeName) {
-    const nodeApiKey = "mehr_sec_" + crypto.randomUUID().replace(/-/g, "") + "_" + Math.random().toString(36).substring(2, 10);
+    const nodeApiKey = await getOrGenerateApiKey(accountId, token, nodeName);
     const agentSource = await fetchFromGithub("mehr-agent.js");
 
     // متغیرهای کاملاً مستقل: فقط شناسه، کلید کنترل و مشخصات برای آمارگیری کلادفلر

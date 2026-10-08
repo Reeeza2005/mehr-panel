@@ -1,4 +1,4 @@
-const WIZARD_VERSION = "1.5.8";
+const WIZARD_VERSION = "1.5.9";
 // =============================================================================
 // Mehr Autonomous Deployment Wizard (Standalone Master & Edge Architecture)
 // =============================================================================
@@ -8,7 +8,7 @@ const CORE_BRANCH = "main";
 
 
 // -----------------------------------------------------------------------------
-// توابع مدیریت دامنه و احراز هویت نودها (v1.5.8)
+// توابع مدیریت دامنه و احراز هویت نودها (v1.5.9)
 // -----------------------------------------------------------------------------
 async function getOrGenerateApiKey(accountId, token, scriptName) {
     try {
@@ -545,7 +545,7 @@ function getWizardHtml(version = WIZARD_VERSION) {
         <div class="result-box" id="resultBox">
             <div class="result-item" style="border-bottom: 1px dashed var(--border, #334155); padding-bottom: 10px; margin-bottom: 10px;">
                 <div class="result-label">🏷️ نسخه مستقر شده:</div>
-                <div class="result-val"><b id="resVersion" style="color:var(--success, #10b981);">v1.5.8</b></div>
+                <div class="result-val"><b id="resVersion" style="color:var(--success, #10b981);">v1.5.9</b></div>
             </div>
             <div class="result-item">
                 <div class="result-label">🌐 آدرس نود / پنل مستقر شده:</div>

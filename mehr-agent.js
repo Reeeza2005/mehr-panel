@@ -1,6 +1,6 @@
 import { connect } from "cloudflare:sockets";
 
-const AGENT_VERSION = "1.5.8";
+const AGENT_VERSION = "1.5.9";
 const DEFAULT_PROXY_IP = "bpb.yousefi.isegaro.com";
 
 function safeCloseWebSocket(ws) {
@@ -98,21 +98,23 @@ function parseVlessHeader(buffer) {
 }
 
 // -------------------------------------------------------------
-// ۲. پارس هدر Trojan (سازگار با استانداردهای Xray/v2ray/BPB)
+// ۲. پارس هدر Trojan (کپی دقیق و بهینه‌شده از تابع Io در سورس BPB)
 // -------------------------------------------------------------
 function parseTrojanHeader(buffer) {
   if (buffer.byteLength < 58) return { hasError: true, message: "Invalid Trojan header size" };
+  
   const cr = new Uint8Array(buffer.slice(56, 57))[0];
   const lf = new Uint8Array(buffer.slice(57, 58))[0];
   if (cr !== 13 || lf !== 10) {
-    return { hasError: true, message: "Invalid Trojan CRLF" };
+    return { hasError: true, message: "Invalid Trojan header format (missing CR LF)" };
   }
 
   const socks5 = buffer.slice(58);
-  if (socks5.byteLength < 6) return { hasError: true, message: "Invalid SOCKS5 header" };
+  if (socks5.byteLength < 6) return { hasError: true, message: "Invalid Trojan SOCKS5 request data" };
+  
   const view = new DataView(socks5);
   const cmd = view.getUint8(0);
-  if (cmd !== 1) return { hasError: true, message: "Unsupported Trojan command: " + cmd };
+  if (cmd !== 1) return { hasError: true, message: "Unsupported Trojan command, only TCP allowed: " + cmd };
 
   const addrType = view.getUint8(1);
   let addrLen = 0;
@@ -133,12 +135,17 @@ function parseTrojanHeader(buffer) {
     for (let i = 0; i < 8; i++) parts.push(dv.getUint16(i * 2).toString(16));
     address = parts.join(":");
   } else {
-    return { hasError: true, message: "Invalid SOCKS5 address type: " + addrType };
+    return { hasError: true, message: "Invalid Trojan addressType: " + addrType };
   }
+
+  if (!address) return { hasError: true, message: "Trojan destination address is empty" };
 
   const portOffset = offset + addrLen;
   const port = new DataView(socks5.slice(portOffset, portOffset + 2)).getUint16(0);
-  const rawDataIdx = 58 + portOffset + 2 + 2; // +2 برای CRLF پایانی
+  
+  // در پروتکل تروجان بعد از ۲ بایت پورت، ۲ بایت CRLF (0x0D 0x0A) قرار دارد
+  // پس آفست دیتای اصلی کلاینت = ۵۸ (شروع ساکس) + portOffset + ۲ (پورت) + ۲ (CRLF)
+  const rawDataIdx = 58 + portOffset + 4;
 
   return {
     hasError: false,
@@ -151,7 +158,7 @@ function parseTrojanHeader(buffer) {
   };
 }
 
-// تشخیص خودکار پروتکل از روی پکت اولیه
+// تشخیص هوشمند پروتکل
 function parseProxyHeader(buffer) {
   if (buffer.byteLength >= 58) {
     const cr = new Uint8Array(buffer.slice(56, 57))[0];
@@ -217,7 +224,6 @@ async function handleProxyWebSocket(request) {
       }
 
       const clientData = chunk.slice(parsed.rawDataIndex);
-      // پاسخ اولیه VLESS شامل دو بایت است، تروجان پاسخ هدر اولیه ندارد
       const respHeader = parsed.protocol === "vless" ? new Uint8Array([parsed.version[0], 0]) : null;
 
       let sock;
@@ -225,13 +231,17 @@ async function handleProxyWebSocket(request) {
         sock = connect({ hostname: parsed.address, port: parsed.port });
         tcpHolder.value = sock;
         const sockWriter = sock.writable.getWriter();
-        await sockWriter.write(clientData);
+        if (clientData.byteLength > 0) {
+          await sockWriter.write(clientData);
+        }
         sockWriter.releaseLock();
       } catch (err) {
         sock = connect({ hostname: DEFAULT_PROXY_IP, port: parsed.port === 443 ? 443 : 80 });
         tcpHolder.value = sock;
         const sockWriter = sock.writable.getWriter();
-        await sockWriter.write(clientData);
+        if (clientData.byteLength > 0) {
+          await sockWriter.write(clientData);
+        }
         sockWriter.releaseLock();
       }
 

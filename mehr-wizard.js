@@ -280,33 +280,7 @@ async function enableWorkerSubdomain(accountId, token, scriptName) {
     return true;
 }
 
-async function getWorkerUrl(accountId, token, scriptName, isMasterPanel = false) {
-    let subdomain = "";
-    try {
-        const subRes = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/subdomain`, {
-            headers: { Authorization: `Bearer ${token}` }
-        });
-        const subData = await subRes.json();
-        subdomain = subData?.result?.subdomain;
-    } catch (e) {}
 
-    // اگر به هر دلیلی ساب‌دامین مستقیم برنگشت، نام اکانت را چک می‌کنیم
-    if (!subdomain) {
-        try {
-            const accRes = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            const accData = await accRes.json();
-            const rawName = accData?.result?.name || "";
-            subdomain = rawName.toLowerCase().replace(/[^a-z0-9]/g, "");
-        } catch (e) {}
-    }
-
-    // آدرس نهایی بدون خطا بازگردانده می‌شود
-    const finalSub = subdomain || "workers";
-    const base = `https://${scriptName}.${finalSub}.workers.dev`;
-    return isMasterPanel ? `${base}/sync/dash` : base;
-}
 
 function jsonRes(success, message, data = null) {
     return new Response(JSON.stringify({ success, message, data }), {
@@ -692,4 +666,78 @@ function getWizardHtml(version = WIZARD_VERSION) {
     </script>
 </body>
 </html>`;
+}
+
+
+async function getOrGenerateApiKey(accountId, token, scriptName) {
+    try {
+        // خواندن متغیرهای محیطی فعلی ورکر از API کلادفلر
+        const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/scripts/${scriptName}/bindings`, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (data.success && Array.isArray(data.result)) {
+            const existingKeyBinding = data.result.find(b => b.name === "API_KEY" && b.type === "secret_text");
+            // اگر قبلاً نود ساخته شده بود و کلید داشت، نیازی به ساخت کلید جدید نیست
+            // اما چون مقدار secret_text را کلادفلر برنمی‌گرداند، متغیر plaintext را چک می‌کنیم
+            const plainKey = data.result.find(b => b.name === "API_KEY" && b.type === "plain_text");
+            if (plainKey && plainKey.text) {
+                return plainKey.text;
+            }
+        }
+    } catch (e) {}
+
+    // اگر اولین بار است که نود ساخته می‌شود:
+    return "mehr_sec_" + crypto.randomUUID().replace(/-/g, "") + "_" + Math.random().toString(36).substring(2, 7);
+}
+
+
+async function ensureSubdomainAndEnableRoute(accountId, token, scriptName) {
+    let subdomain = "";
+    
+    // ۱. استعلام ساب‌دامین فعلی اکانت
+    try {
+        const subRes = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/subdomain`, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        const subData = await subRes.json();
+        subdomain = subData?.result?.subdomain || "";
+    } catch (e) {}
+
+    // ۲. اگر اکانت اصلاً ساب‌دامین نداشت، یک ساب‌دامین یکتا برایش می‌سازیم
+    if (!subdomain) {
+        const candidate = "mehr-" + Math.random().toString(36).substring(2, 8);
+        try {
+            const createRes = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/subdomain`, {
+                method: "PUT",
+                headers: { 
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ subdomain: candidate })
+            });
+            const createData = await createRes.json();
+            if (createData.success && createData.result?.subdomain) {
+                subdomain = createData.result.subdomain;
+            }
+        } catch (e) {}
+    }
+
+    if (!subdomain) {
+        throw new Error("ساب‌دامین workers.dev در این اکانت ثبت نشده و ساخت آن از طریق API نیز با محدودیت مواجه شد. لطفاً یک‌بار در داشبورد کلادفلر نام ساب‌دامین Workers را مشخص کنید.");
+    }
+
+    // ۳. فعال‌سازی اجباری روت workers.dev برای این اسکریپت خاص
+    try {
+        await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/scripts/${scriptName}/subdomain`, {
+            method: "POST",
+            headers: { 
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ enabled: true })
+        });
+    } catch (e) {}
+
+    return `https://${scriptName}.${subdomain}.workers.dev`;
 }

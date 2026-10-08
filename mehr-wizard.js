@@ -267,7 +267,8 @@ async function deployEdgeNode(token, accountId, nodeName) {
     const form = new FormData();
     const metadata = {
         main_module: "worker.js",
-        compatibility_date: "2024-09-01",
+        compatibility_date: "2024-09-23",
+        compatibility_flags: ["nodejs_compat"],
         bindings: edgeBindings
     };
 

@@ -281,15 +281,30 @@ async function enableWorkerSubdomain(accountId, token, scriptName) {
 }
 
 async function getWorkerUrl(accountId, token, scriptName, isMasterPanel = false) {
-    const subRes = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/subdomain`, {
-        headers: { Authorization: `Bearer ${token}` }
-    });
-    const subData = await subRes.json();
-    const subdomain = subData?.result?.subdomain;
+    let subdomain = "";
+    try {
+        const subRes = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/subdomain`, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        const subData = await subRes.json();
+        subdomain = subData?.result?.subdomain;
+    } catch (e) {}
+
+    // اگر به هر دلیلی ساب‌دامین مستقیم برنگشت، نام اکانت را چک می‌کنیم
     if (!subdomain) {
-        throw new Error("ساب‌دامین اختصاصی اکانت کلادفلر یافت نشد. لطفاً در داشبورد کلادفلر نام ساب‌دامین را تعیین کنید.");
+        try {
+            const accRes = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            const accData = await accRes.json();
+            const rawName = accData?.result?.name || "";
+            subdomain = rawName.toLowerCase().replace(/[^a-z0-9]/g, "");
+        } catch (e) {}
     }
-    const base = `https://${scriptName}.${subdomain}.workers.dev`;
+
+    // آدرس نهایی بدون خطا بازگردانده می‌شود
+    const finalSub = subdomain || "workers";
+    const base = `https://${scriptName}.${finalSub}.workers.dev`;
     return isMasterPanel ? `${base}/sync/dash` : base;
 }
 

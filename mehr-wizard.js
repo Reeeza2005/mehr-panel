@@ -243,11 +243,18 @@ async function deployEdgeNode(token, accountId, nodeName, customMasterUrl = "", 
     ];
 
     if (masterServiceName) {
-        edgeBindings.push({
-            type: "service",
-            name: "PANEL_SERVICE",
-            service: masterServiceName
-        });
+        try {
+            const chkRes = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/scripts/${masterServiceName}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (chkRes.ok) {
+                edgeBindings.push({
+                    type: "service",
+                    name: "PANEL_SERVICE",
+                    service: masterServiceName
+                });
+            }
+        } catch(e) {}
     }
 
     const form = new FormData();

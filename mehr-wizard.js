@@ -12,17 +12,24 @@ const CORE_BRANCH = "main";
 // -----------------------------------------------------------------------------
 async function getOrGenerateApiKey(accountId, token, scriptName) {
     try {
-        const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/scripts/${scriptName}/bindings`, {
+        // ۱. استعلام مستقیم اسکریپت و متغیرهای آن از API کلادفلر
+        const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/scripts/${scriptName}`, {
             headers: { Authorization: `Bearer ${token}` }
         });
-        const data = await res.json();
-        if (data.success && Array.isArray(data.result)) {
-            const existing = data.result.find(b => b.name === "API_KEY");
-            if (existing && existing.text) {
-                return existing.text;
+        // ۲. همچنین اندپوینت بایندینگ‌ها را چک می‌کنیم
+        const bRes = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/scripts/${scriptName}/bindings`, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        const bData = await bRes.json();
+        if (bData.success && Array.isArray(bData.result)) {
+            const found = bData.result.find(b => b.name === "API_KEY");
+            if (found && (found.text || found.value)) {
+                return found.text || found.value;
             }
         }
     } catch (e) {}
+
+    // اگر اولین بار است و ورکر وجود ندارد، یک کلید امن تولید می‌شود
     return "mehr_sec_" + crypto.randomUUID().replace(/-/g, "") + "_" + Math.random().toString(36).substring(2, 7);
 }
 

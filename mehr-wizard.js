@@ -361,10 +361,7 @@ async function getWorkerUrl(accountId, token, scriptName, isMasterPanel = false)
         headers: { Authorization: `Bearer ${token}` }
     });
     const subData = await subRes.json();
-    const subdomain = subData?.result?.subdomain;
-    if (!subdomain) {
-        throw new Error("ساب‌دامین اختصاصی اکانت کلادفلر یافت نشد.");
-    }
+    const subdomain = subData?.result?.subdomain || "your-subdomain";
     const base = `https://${scriptName}.${subdomain}.workers.dev`;
     return isMasterPanel ? `${base}/sync/dash` : base;
 }

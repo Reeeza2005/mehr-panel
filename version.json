@@ -1,9 +1,10 @@
 {
-  "version": "1.3.5",
-  "releaseDate": "2026-10-07",
+  "version": "1.3.6",
+  "releaseDate": "2026-10-08",
   "features": [
     "Resolved Cloudflare Worker error 1042 via dynamic Service Binding (PANEL_SERVICE)",
     "Fixed Edge node background sync failure on workers.dev subdomains",
-    "Fully automated node-to-master communication"
+    "Fully automated node-to-master communication",
+    "Automated fallback for Edge Node deployment in Cross-Account scenarios without Cluster Key errors"
   ]
 }

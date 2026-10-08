@@ -221,7 +221,7 @@ async function deployEdgeNode(token, accountId, nodeName, customMasterUrl = "", 
         throw new Error("آدرس پنل مستر مشخص نیست. لطفاً آدرس پنل اصلی را در فرم وارد کنید.");
     }
     if (!clusterSecret) {
-        throw new Error("کلید کلاستر (Cluster Key) یافت نشد. برای اتصال نود سفارشی، کلید کلاستر پنل الزامی است.");
+        clusterSecret = "mehr_sec_" + crypto.randomUUID().replace(/-/g, "");
     }
 
     // استخراج هوشمند نام سرویس ورکر مستر جهت Service Binding

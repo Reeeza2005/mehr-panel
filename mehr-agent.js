@@ -1,3 +1,4 @@
+const AGENT_VERSION = "1.1.0";
 function parseChainTarget(uri) {
   if (!uri || typeof uri !== "string") return null;
   try {
@@ -5,18 +6,64 @@ function parseChainTarget(uri) {
     if (cleanUri.startsWith("vmess://")) {
       const raw = atob(cleanUri.replace("vmess://", ""));
       const j = JSON.parse(raw);
-      return { host: j.add || j.host, port: parseInt(j.port) || 443 };
+      return { protocol: "vmess", host: j.add || j.host, port: parseInt(j.port) || 443 };
     }
     if (cleanUri.includes("://")) {
       const u = new URL(cleanUri);
-      return { host: u.hostname, port: parseInt(u.port) || 443 };
+      const protocol = u.protocol.replace(":", "").toLowerCase();
+      const params = u.searchParams;
+      const isWs = params.get("type") === "ws" || params.get("net") === "ws";
+      return {
+        protocol,
+        uuid: u.username || "",
+        host: u.hostname,
+        port: parseInt(u.port) || (protocol === "vless" || protocol === "https" ? 443 : 80),
+        path: params.get("path") || "/",
+        isWs: isWs || protocol === "vless",
+        tls: params.get("security") === "tls" || protocol === "https" || parseInt(u.port) === 443 || parseInt(u.port) === 9443,
+        hostHeader: params.get("host") || params.get("sni") || u.hostname
+      };
     }
     const parts = cleanUri.split(":");
-    return { host: parts[0], port: parseInt(parts[1]) || 443 };
+    return { protocol: "raw", host: parts[0], port: parseInt(parts[1]) || 443 };
   } catch(e) {
     return null;
   }
 }
+
+function uuidToBytes(uuidStr) {
+  if (!uuidStr || typeof uuidStr !== "string") return new Uint8Array(16);
+  const clean = uuidStr.replace(/-/g, "").toLowerCase();
+  const bytes = new Uint8Array(16);
+  for (let i = 0; i < 16; i++) {
+    bytes[i] = parseInt(clean.substr(i * 2, 2), 16) || 0;
+  }
+  return bytes;
+}
+
+function buildVlessHeader(uuidBytes, targetHost, targetPort) {
+  const enc = new TextEncoder();
+  const hostBytes = enc.encode(targetHost);
+  const totalLen = 1 + 16 + 1 + 1 + 2 + 1 + 1 + hostBytes.length;
+  const buf = new Uint8Array(totalLen);
+  let pos = 0;
+
+  buf[pos++] = 0; // VLESS version 0
+  buf.set(uuidBytes, pos); pos += 16; // 16 bytes UUID
+  buf[pos++] = 0; // addons length = 0
+  buf[pos++] = 1; // command: 1 = TCP stream
+
+  // Port: 2 bytes Big-Endian
+  buf[pos++] = (targetPort >> 8) & 0xff;
+  buf[pos++] = targetPort & 0xff;
+
+  // Address: Type 2 = Domain
+  buf[pos++] = 2;
+  buf[pos++] = hostBytes.length;
+  buf.set(hostBytes, pos);
+  return buf;
+}
+
 
 
 async function forceSyncUsers(env) {
@@ -98,7 +145,7 @@ async function dispatchToMaster(env, targetUrl, init) {
 }
 
 
-const DEFAULT_PROXY_IP = "134.209.136.197";
+const DEFAULT_PROXY_IP = "141.101.90.112";
 
 var cachedAllowedUsers = new Set();
 var cachedBlockedUsers = new Set();
@@ -516,47 +563,178 @@ async function establishSocketWithProxy(socketHolder, targetHost, targetPort, ra
     
     let chainTarget = null;
     try {
-      const reqUrl = new URL(request?.url || "https://node.internal");
-      const chainParam = reqUrl.searchParams.get("chain");
-      if (chainParam) {
-        chainTarget = parseChainTarget(decodeURIComponent(chainParam));
-      } else if (reqUrl.searchParams.get("upstream") === "true" || reqUrl.pathname.includes("upstream=true")) {
+      const rawRequestUrl = request?.url || "";
+      let decodedUrl = rawRequestUrl;
+      try { decodedUrl = decodeURIComponent(rawRequestUrl); } catch {}
+
+      let chainRaw = null;
+      const reqUrl = new URL(rawRequestUrl.startsWith("http") ? rawRequestUrl : "https://node.internal" + rawRequestUrl);
+      chainRaw = reqUrl.searchParams.get("chain");
+
+      if (!chainRaw) {
+        const idx = decodedUrl.indexOf("chain=");
+        if (idx !== -1) {
+          chainRaw = decodedUrl.substring(idx + 6);
+          const hashIdx = chainRaw.indexOf("#");
+          if (hashIdx !== -1) chainRaw = chainRaw.substring(0, hashIdx);
+          const spaceIdx = chainRaw.indexOf(" ");
+          if (spaceIdx !== -1) chainRaw = chainRaw.substring(0, spaceIdx);
+        }
+      }
+
+      if (chainRaw) {
+        chainTarget = parseChainTarget(chainRaw);
+      } else if (reqUrl.searchParams.get("upstream") === "true" || decodedUrl.includes("upstream=true")) {
         chainTarget = activeUpstreamTarget;
       }
-    } catch(e) {}
-
+    } catch(e) {
+      console.error("[CHAIN_EXTRACT_ERR]:", e?.message || e);
+    }
     const selectedTarget = chainTarget || activeUpstreamTarget;
-    const destHost = selectedTarget ? selectedTarget.host : targetHost;
-    const destPort = selectedTarget ? selectedTarget.port : targetPort;
-    sock = connect({ hostname: destHost, port: destPort });
-    socketHolder.value = sock;
+    if (selectedTarget && selectedTarget.protocol === "vless" && selectedTarget.isWs) {
+      const scheme = selectedTarget.tls ? "https" : "http";
+      const wsUrl = `${scheme}://${selectedTarget.host}:${selectedTarget.port}${selectedTarget.path}`;
+      let wsResp;
+      try {
+        wsResp = await fetch(wsUrl, {
+          signal: AbortSignal.timeout(5000),
+          headers: {
+            "Upgrade": "websocket",
+            "Connection": "Upgrade",
+            "Host": selectedTarget.hostHeader || selectedTarget.host,
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+          }
+        });
+      } catch (wsConnErr) {
+        throw new Error("ERR_UPSTREAM_TIMEOUT: " + (wsConnErr?.message || "timeout"));
+      }
 
-    if (rawPayload && rawPayload.byteLength > 0) {
-      const writer = sock.writable.getWriter();
-      await writer.write(rawPayload);
-      writer.releaseLock();
+      const outboundWs = wsResp.webSocket;
+      if (!outboundWs) {
+        throw new Error("ERR_UPSTREAM_WS_UPGRADE_FAILED");
+      }
+      outboundWs.accept();
+
+      // ساخت و ارسال هدر استاندارد VLESS کلاینت
+      const vlessHdr = buildVlessHeader(uuidToBytes(selectedTarget.uuid), targetHost, targetPort);
+      let initialData = vlessHdr;
+      if (rawPayload && rawPayload.byteLength > 0) {
+        const combined = new Uint8Array(vlessHdr.byteLength + rawPayload.byteLength);
+        combined.set(vlessHdr, 0);
+        combined.set(new Uint8Array(rawPayload), vlessHdr.byteLength);
+        initialData = combined;
+      }
+      outboundWs.send(initialData);
+
+      // شبیه‌سازی رابط استاندارد Socket Streams برای سازگاری با بقیه کد
+      const outboundReadable = new ReadableStream({
+        start(controller) {
+          let isFirstVlessChunk = true;
+          outboundWs.addEventListener("message", (event) => {
+            let data = event.data;
+            let bytes = (typeof data === "string") ? new TextEncoder().encode(data) : new Uint8Array(data);
+            if (isFirstVlessChunk) {
+              isFirstVlessChunk = false;
+              if (bytes.length >= 2) {
+                const addonLen = bytes[1];
+                const headerLen = 2 + addonLen;
+                if (bytes.length > headerLen) {
+                  bytes = bytes.slice(headerLen);
+                  controller.enqueue(bytes);
+                }
+                return;
+              }
+            }
+            if (bytes.length > 0) {
+              controller.enqueue(bytes);
+            }
+          });
+          outboundWs.addEventListener("close", () => {
+            try { controller.close(); } catch {}
+          });
+          outboundWs.addEventListener("error", (err) => {
+            try { controller.error(err); } catch {}
+          });
+        },
+        cancel() {
+          try { outboundWs.close(); } catch {}
+        }
+      });
+
+      const outboundWritable = new WritableStream({
+        write(chunk) {
+          if (outboundWs.readyState === 1) {
+            outboundWs.send(chunk);
+          }
+        },
+        close() {
+          try { outboundWs.close(); } catch {}
+        },
+        abort() {
+          try { outboundWs.close(); } catch {}
+        }
+      });
+
+      sock = {
+        readable: outboundReadable,
+        writable: outboundWritable,
+        close() {
+          try { outboundWs.close(); } catch {}
+        }
+      };
+      socketHolder.value = sock;
+    } else {
+      const destHost = selectedTarget ? selectedTarget.host : targetHost;
+      const destPort = selectedTarget ? selectedTarget.port : targetPort;
+      sock = connect({ hostname: destHost, port: destPort });
+      socketHolder.value = sock;
+
+      if (rawPayload && rawPayload.byteLength > 0) {
+        const writer = sock.writable.getWriter();
+        writer.write(rawPayload).catch(() => {}).finally(() => {
+          try { writer.releaseLock(); } catch {}
+        });
+      } else if (!selectedTarget) {
+        const writer = sock.writable.getWriter();
+        writer.write(new TextEncoder().encode("HEAD / HTTP/1.1\r\nHost: " + destHost + "\r\nConnection: close\r\n\r\n")).catch(() => {}).finally(() => {
+          try { writer.releaseLock(); } catch {}
+        });
+      }
     }
   } catch (directErr) {
     console.error("DIRECT_CONNECT_ERROR:", directErr?.message || directErr);
+    if (selectedTarget) {
+      try { ws.close(1011, "UPSTREAM_UNAVAILABLE"); } catch {}
+      return;
+    }
     try {
       if (proxyIP) {
-        sock = connect({ hostname: proxyIP, port: targetPort === 443 ? 443 : 80 });
+        sock = connect({ hostname: proxyIP, port: targetPort });
         socketHolder.value = sock;
         if (rawPayload && rawPayload.byteLength > 0) {
           const writer = sock.writable.getWriter();
-          await writer.write(rawPayload);
-          writer.releaseLock();
+          writer.write(rawPayload).catch(() => {}).finally(() => {
+            try { writer.releaseLock(); } catch {}
+          });
         }
       } else {
         throw directErr;
       }
     } catch (proxyErr) {
-      try { ws.close(1011, "ERR_CONNECT:" + (proxyErr?.message || "failed")); } catch {}
-      return;
+      try { ws.close(1011, "ERR_CONNECT"); } catch {}
+      socketHolder.value = {
+        readable: new ReadableStream({ start(c) { c.close(); } }),
+        writable: new WritableStream({ write() {} }),
+        close() { try { ws.close(); } catch {} }
+      };
+      sock = socketHolder.value;
     }
   }
 
-  let headerToSend = responseHeader;
+  if (responseHeader && ws.readyState === 1) {
+    try { ws.send(responseHeader); } catch {}
+  }
+
   const wsWriter = new WritableStream({
     async write(chunk) {
       if (ws.readyState !== 1) return;
@@ -566,13 +744,7 @@ async function establishSocketWithProxy(socketHolder, targetHost, targetPort, ra
         uStat.down += sz;
         pendingUserTraffic.set(userUuid, uStat);
       }
-
-      if (headerToSend) {
-        ws.send(await new Blob([headerToSend, chunk]).arrayBuffer());
-        headerToSend = null;
-      } else {
-        ws.send(chunk);
-      }
+      ws.send(chunk);
     },
     close() { 
       try { sock.close(); } catch {}
@@ -584,11 +756,13 @@ async function establishSocketWithProxy(socketHolder, targetHost, targetPort, ra
     }
   });
 
-  sock.readable.pipeTo(wsWriter).catch(() => {
+  const pipePromise = sock.readable.pipeTo(wsWriter).catch(() => {
     try { sock.close(); } catch {}
     safeCloseWebSocket(ws);
+  }).finally(() => {
     if (ctx?.waitUntil) ctx.waitUntil(syncWithMaster(env, request, true));
   });
+  if (ctx?.waitUntil) ctx.waitUntil(pipePromise);
 }
 
 function handleVlessWS(request, env, ctx) {
@@ -632,6 +806,7 @@ function handleVlessWS(request, env, ctx) {
       currentUserUuid = parsed.cleanUuid || parsed.rawUuid || parsed.uuid;
       const vlessResponseHeader = isVless ? new Uint8Array([parsed.VLVersion[0], 0]) : null;
       const rawPayload = parsed.rawBuffer.slice(parsed.rawDataIndex);
+      console.log(`[DIAG] proto=${isVless ? "VLESS" : "TROJAN"} host=${parsed.addressRemote} port=${parsed.portRemote} udp=${parsed.isUDP} payloadLen=${rawPayload?.byteLength || 0}`);
 
       if (rawPayload && rawPayload.byteLength > 0 && currentUserUuid) {
         const uStat = pendingUserTraffic.get(currentUserUuid) || { up: 0, down: 0 };

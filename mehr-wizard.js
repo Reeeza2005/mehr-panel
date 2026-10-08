@@ -17,9 +17,9 @@ async function getOrGenerateApiKey(accountId, token, scriptName) {
         });
         const data = await res.json();
         if (data.success && Array.isArray(data.result)) {
-            const plainKey = data.result.find(b => b.name === "API_KEY" && b.type === "plain_text");
-            if (plainKey && plainKey.text) {
-                return plainKey.text;
+            const existing = data.result.find(b => b.name === "API_KEY");
+            if (existing && existing.text) {
+                return existing.text;
             }
         }
     } catch (e) {}

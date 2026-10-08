@@ -1,4 +1,4 @@
-const WIZARD_VERSION = "1.5.6";
+const WIZARD_VERSION = "1.5.7";
 // =============================================================================
 // Mehr Autonomous Deployment Wizard (Standalone Master & Edge Architecture)
 // =============================================================================
@@ -8,7 +8,7 @@ const CORE_BRANCH = "main";
 
 
 // -----------------------------------------------------------------------------
-// توابع مدیریت دامنه و احراز هویت نودها (v1.5.6)
+// توابع مدیریت دامنه و احراز هویت نودها (v1.5.7)
 // -----------------------------------------------------------------------------
 async function getOrGenerateApiKey(accountId, token, scriptName) {
     try {
@@ -616,7 +616,7 @@ function getWizardHtml(version = WIZARD_VERSION) {
                 nameInput.value = "mehr";
             } else {
                 label.innerText = "نام ورکر نود فرعی";
-                nameInput.value = "node-edge-1";
+                nameInput.value = "node-edge-3";
             }
         }
 

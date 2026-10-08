@@ -206,7 +206,7 @@ export default {
         return new Response(JSON.stringify({
           status: "online",
           node_id: env.NODE_ID || "node-edge-3",
-          version: "1.5.3"
+          version: "1.5.4"
         }), {
           headers: { "Content-Type": "application/json" }
         });
@@ -217,7 +217,7 @@ export default {
         status: "active",
         service: "Mehr Edge Node",
         node_id: env.NODE_ID || "node-edge-3",
-        version: "1.5.3"
+        version: "1.5.4"
       }, null, 2), {
         headers: { "Content-Type": "application/json; charset=utf-8" }
       });

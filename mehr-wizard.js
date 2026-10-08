@@ -1,4 +1,4 @@
-const WIZARD_VERSION = "1.5.3";
+const WIZARD_VERSION = "1.5.4";
 // =============================================================================
 // Mehr Autonomous Deployment Wizard (Standalone Master & Edge Architecture)
 // =============================================================================
@@ -8,7 +8,7 @@ const CORE_BRANCH = "main";
 
 
 // -----------------------------------------------------------------------------
-// توابع مدیریت دامنه و احراز هویت نودها (v1.5.3)
+// توابع مدیریت دامنه و احراز هویت نودها (v1.5.4)
 // -----------------------------------------------------------------------------
 async function getOrGenerateApiKey(accountId, token, scriptName) {
     try {
@@ -264,14 +264,14 @@ async function deployEdgeNode(token, accountId, nodeName) {
 
     const form = new FormData();
     const metadata = {
-        main_module: "agent.js",
-        compatibility_date: new Date().toISOString().split("T")[0],
+        main_module: "worker.js",
+        compatibility_date: "2024-09-01",
         compatibility_flags: ["nodejs_compat"],
         bindings: edgeBindings
     };
 
     form.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
-    form.append("agent.js", new Blob([agentSource], { type: "application/javascript+module" }), "agent.js");
+    form.append("worker.js", new Blob([agentSource], { type: "application/javascript+module" }), "worker.js");
 
     const deployRes = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/scripts/${nodeName}`, {
         method: "PUT",

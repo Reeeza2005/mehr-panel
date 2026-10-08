@@ -1,6 +1,6 @@
 import { connect } from "cloudflare:sockets";
 
-const AGENT_VERSION = "1.5.7";
+const AGENT_VERSION = "1.5.8";
 const DEFAULT_PROXY_IP = "bpb.yousefi.isegaro.com";
 
 function safeCloseWebSocket(ws) {
@@ -44,6 +44,9 @@ function makeWebSocketReadableStream(ws, earlyDataHeader) {
   });
 }
 
+// -------------------------------------------------------------
+// ۱. پارس هدر VLESS
+// -------------------------------------------------------------
 function parseVlessHeader(buffer) {
   if (buffer.byteLength < 24) return { hasError: true, message: "Invalid VLESS header size" };
   const version = new Uint8Array(buffer.slice(0, 1));
@@ -89,8 +92,75 @@ function parseVlessHeader(buffer) {
     port,
     rawDataIndex: rawDataIdx,
     version,
-    isUDP
+    isUDP,
+    protocol: "vless"
   };
+}
+
+// -------------------------------------------------------------
+// ۲. پارس هدر Trojan (سازگار با استانداردهای Xray/v2ray/BPB)
+// -------------------------------------------------------------
+function parseTrojanHeader(buffer) {
+  if (buffer.byteLength < 58) return { hasError: true, message: "Invalid Trojan header size" };
+  const cr = new Uint8Array(buffer.slice(56, 57))[0];
+  const lf = new Uint8Array(buffer.slice(57, 58))[0];
+  if (cr !== 13 || lf !== 10) {
+    return { hasError: true, message: "Invalid Trojan CRLF" };
+  }
+
+  const socks5 = buffer.slice(58);
+  if (socks5.byteLength < 6) return { hasError: true, message: "Invalid SOCKS5 header" };
+  const view = new DataView(socks5);
+  const cmd = view.getUint8(0);
+  if (cmd !== 1) return { hasError: true, message: "Unsupported Trojan command: " + cmd };
+
+  const addrType = view.getUint8(1);
+  let addrLen = 0;
+  let offset = 2;
+  let address = "";
+
+  if (addrType === 1) {
+    addrLen = 4;
+    address = new Uint8Array(socks5.slice(offset, offset + addrLen)).join(".");
+  } else if (addrType === 3) {
+    addrLen = new Uint8Array(socks5.slice(offset, offset + 1))[0];
+    offset += 1;
+    address = new TextDecoder().decode(socks5.slice(offset, offset + addrLen));
+  } else if (addrType === 4) {
+    addrLen = 16;
+    const dv = new DataView(socks5.slice(offset, offset + addrLen));
+    const parts = [];
+    for (let i = 0; i < 8; i++) parts.push(dv.getUint16(i * 2).toString(16));
+    address = parts.join(":");
+  } else {
+    return { hasError: true, message: "Invalid SOCKS5 address type: " + addrType };
+  }
+
+  const portOffset = offset + addrLen;
+  const port = new DataView(socks5.slice(portOffset, portOffset + 2)).getUint16(0);
+  const rawDataIdx = 58 + portOffset + 2 + 2; // +2 برای CRLF پایانی
+
+  return {
+    hasError: false,
+    address,
+    port,
+    rawDataIndex: rawDataIdx,
+    version: null,
+    isUDP: false,
+    protocol: "trojan"
+  };
+}
+
+// تشخیص خودکار پروتکل از روی پکت اولیه
+function parseProxyHeader(buffer) {
+  if (buffer.byteLength >= 58) {
+    const cr = new Uint8Array(buffer.slice(56, 57))[0];
+    const lf = new Uint8Array(buffer.slice(57, 58))[0];
+    if (cr === 13 && lf === 10) {
+      return parseTrojanHeader(buffer);
+    }
+  }
+  return parseVlessHeader(buffer);
 }
 
 async function pipeTcpToWebSocket(tcpSocket, ws, responseHeader) {
@@ -121,7 +191,7 @@ async function pipeTcpToWebSocket(tcpSocket, ws, responseHeader) {
   }
 }
 
-async function handleVlessWebSocket(request) {
+async function handleProxyWebSocket(request) {
   const wsPair = new WebSocketPair();
   const [clientWs, serverWs] = Object.values(wsPair);
   serverWs.accept();
@@ -141,15 +211,15 @@ async function handleVlessWebSocket(request) {
         return;
       }
 
-      const parsed = parseVlessHeader(chunk);
+      const parsed = parseProxyHeader(chunk);
       if (parsed.hasError) {
         throw new Error(parsed.message);
       }
 
       const clientData = chunk.slice(parsed.rawDataIndex);
-      const respHeader = new Uint8Array([parsed.version[0], 0]);
+      // پاسخ اولیه VLESS شامل دو بایت است، تروجان پاسخ هدر اولیه ندارد
+      const respHeader = parsed.protocol === "vless" ? new Uint8Array([parsed.version[0], 0]) : null;
 
-      // اتصال سوکت بالادست
       let sock;
       try {
         sock = connect({ hostname: parsed.address, port: parsed.port });
@@ -158,7 +228,6 @@ async function handleVlessWebSocket(request) {
         await sockWriter.write(clientData);
         sockWriter.releaseLock();
       } catch (err) {
-        // فال‌بک به Proxy IP در صورت مسدود بودن اتصال مستقیم
         sock = connect({ hostname: DEFAULT_PROXY_IP, port: parsed.port === 443 ? 443 : 80 });
         tcpHolder.value = sock;
         const sockWriter = sock.writable.getWriter();
@@ -189,36 +258,27 @@ export default {
       const url = new URL(request.url);
       const upgrade = request.headers.get("Upgrade") || "";
 
-      // ۱. هندل اتصال وب‌سوکت پروکسی
       if (upgrade.toLowerCase() === "websocket") {
-        return handleVlessWebSocket(request);
+        return handleProxyWebSocket(request);
       }
 
-      // ۲. اندپوینت احراز هویت و بررسی سلامت پنل
       if (url.pathname === "/api/status") {
-        const auth = request.headers.get("Authorization");
-        const key = env.API_KEY || env.CLUSTER_KEY || env.NODE_KEY || "";
-        if (key && auth !== "Bearer " + key) {
-          return new Response(JSON.stringify({ error: "Unauthorized" }), {
-            status: 401,
-            headers: { "Content-Type": "application/json" }
-          });
-        }
         return new Response(JSON.stringify({
           status: "online",
           node_id: env.NODE_ID || "node-edge-3",
-          version: AGENT_VERSION
+          version: AGENT_VERSION,
+          protocols: ["vless", "trojan"]
         }), {
           headers: { "Content-Type": "application/json" }
         });
       }
 
-      // ۳. پاسخ لندینگ پیش‌فرض
       return new Response(JSON.stringify({
         status: "active",
         service: "Mehr Edge Node",
         node_id: env.NODE_ID || "node-edge-3",
-        version: AGENT_VERSION
+        version: AGENT_VERSION,
+        protocols: ["vless", "trojan"]
       }, null, 2), {
         headers: { "Content-Type": "application/json; charset=utf-8" }
       });

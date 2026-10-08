@@ -1,4 +1,4 @@
-const WIZARD_VERSION = "1.5.7";
+const WIZARD_VERSION = "1.5.8";
 // =============================================================================
 // Mehr Autonomous Deployment Wizard (Standalone Master & Edge Architecture)
 // =============================================================================
@@ -8,7 +8,7 @@ const CORE_BRANCH = "main";
 
 
 // -----------------------------------------------------------------------------
-// توابع مدیریت دامنه و احراز هویت نودها (v1.5.7)
+// توابع مدیریت دامنه و احراز هویت نودها (v1.5.8)
 // -----------------------------------------------------------------------------
 async function getOrGenerateApiKey(accountId, token, scriptName) {
     try {
@@ -291,7 +291,8 @@ async function deployEdgeNode(token, accountId, nodeName) {
         type: "edge",
         url: finalUrl,
         apiKey: nodeApiKey,
-        name: nodeName
+        name: nodeName,
+        version: "1.5.8"
     });
 }
 
@@ -542,6 +543,10 @@ function getWizardHtml(version = WIZARD_VERSION) {
         <div class="status" id="statusMsg"></div>
 
         <div class="result-box" id="resultBox">
+            <div class="result-item" style="border-bottom: 1px dashed var(--border, #334155); padding-bottom: 10px; margin-bottom: 10px;">
+                <div class="result-label">🏷️ نسخه مستقر شده:</div>
+                <div class="result-val"><b id="resVersion" style="color:var(--success, #10b981);">v1.5.8</b></div>
+            </div>
             <div class="result-item">
                 <div class="result-label">🌐 آدرس نود / پنل مستقر شده:</div>
                 <div class="result-val">
@@ -701,6 +706,7 @@ function getWizardHtml(version = WIZARD_VERSION) {
                     status.className = "status success";
                     status.innerText = "استقرار با موفقیت انجام شد!";
                     document.getElementById("resUrl").innerText = data.data.url;
+                    if (document.getElementById("resVersion")) document.getElementById("resVersion").innerText = "v" + (data.data.version || "1.5.8");
                     
                     const keyBox = document.getElementById("keyBox");
                     const resultDesc = document.getElementById("resultDesc");

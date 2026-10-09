@@ -5591,62 +5591,73 @@ function buildModeCheckboxes(wrapId, userMode) {
     };
 
     // تست ارتباط معتبر با استفاده از Image Ping که محدودیت CORS ندارد
-    function pingHost(host, timeoutMs = 3000) {
-        return new Promise(async (resolve) => {
-            const start = Date.now();
-            let resolved = false;
-
-            const timer = setTimeout(() => {
-                if (!resolved) {
-                    resolved = true;
-                    resolve({ ok: false, latency: "--" });
-                }
-            }, timeoutMs);
-
-            try {
-                const clean = (host || "").trim().replace(/^https?:\/\//i, "").split("/")[0].split(":")[0];
-                const res = await fetch(`https://${clean}/favicon.ico?_r=${Math.random()}`, {
-                    mode: "no-cors",
-                    signal: AbortSignal.timeout(timeoutMs)
-                });
-                if (!resolved) {
-                    resolved = true;
-                    clearTimeout(timer);
-                    const delta = Date.now() - start;
-                    resolve({ ok: true, latency: delta });
-                }
-            } catch (e) {
-                if (!resolved) {
-                    resolved = true;
-                    clearTimeout(timer);
-                    resolve({ ok: false, latency: "--" });
+    async function pingHost(host, timeoutMs = 4000) {
+        try {
+            const clean = (host || "").trim().replace(/^https?:\/\//i, "").split("/")[0].split(":")[0];
+            const token = window.nahanConfig?.clusterKey || "mehr_cluster_key_2026";
+            const targetUrl = `/api/test-node?host=${encodeURIComponent("https://" + clean)}&key=${encodeURIComponent(token)}`;
+            const res = await fetch(targetUrl, { signal: AbortSignal.timeout(timeoutMs) }).catch(() => null);
+            if (res && res.ok) {
+                const data = await res.json().catch(() => null);
+                if (data) {
+                    return {
+                        ok: data.state === "healthy",
+                        state: data.state, // healthy | restricted | dead
+                        latency: data.latency || "--",
+                        country: data.country || "",
+                        colo: data.colo || ""
+                    };
                 }
             }
-        });
+            return { ok: false, state: "dead", latency: "--" };
+        } catch (e) {
+            return { ok: false, state: "dead", latency: "--" };
+        }
     }
 
     window.testSingleNode = async function (host, btnId) {
         const btn = document.getElementById(btnId);
-        const originalText = btn ? btn.innerHTML : "";
         if (btn) {
             btn.disabled = true;
             btn.innerHTML = `<span>در حال سنجش...</span>`;
         }
 
-        const res = await pingHost(host, 3500);
+        const res = await pingHost(host, 4500);
 
-        window.clusterNodeStats.nodes[host] = window.clusterNodeStats.nodes[host] || {};
-        window.clusterNodeStats.nodes[host].online = res.ok;
-        window.clusterNodeStats.nodes[host].latency = res.latency;
+        const clean = (host || "").trim().replace(/^https?:\/\//i, "").split("/")[0].split(":")[0];
+        window.clusterNodeStats = window.clusterNodeStats || { nodes: {} };
+        window.clusterNodeStats.nodes = window.clusterNodeStats.nodes || {};
+
+        const nodeObj = {
+            online: res.ok,
+            state: res.state,
+            latency: res.latency,
+            totalBytes: 0,
+            country: res.country || "",
+            colo: res.colo || ""
+        };
+
+        window.clusterNodeStats.nodes[host] = nodeObj;
+        window.clusterNodeStats.nodes[clean] = nodeObj;
+        window.clusterNodeStats.nodes["https://" + clean] = nodeObj;
 
         if (btn) {
             btn.disabled = false;
-            btn.innerHTML = res.ok ? `<span>${res.latency} ms</span>` : `<span class="text-rose-500">قطع ارتباط</span>`;
+            if (res.state === "healthy") {
+                btn.innerHTML = `<span class="text-emerald-500 font-bold">${res.latency} ms</span>`;
+            } else if (res.state === "restricted") {
+                btn.innerHTML = `<span class="text-amber-500 font-bold animate-pulse">محدود / ۱۱۰۱</span>`;
+            } else {
+                btn.innerHTML = `<span class="text-rose-500 font-bold">قطع ارتباط</span>`;
+            }
         }
         if (typeof showToast === "function") {
-            showToast(res.ok ? `پینگ ${host}: ${res.latency} میلی‌ثانیه` : `سرور ${host} در دسترس نیست`, res.ok ? "success" : "error");
+            const msg = res.state === "healthy" ? `نود ${clean} آنلاین است (${res.latency}ms)` :
+                        (res.state === "restricted" ? `نود ${clean} مسدود / خطای ۱۱۰۱ است` : `نود ${clean} قطع است`);
+            const toastType = res.state === "healthy" ? "success" : (res.state === "restricted" ? "warning" : "error");
+            showToast(msg, toastType);
         }
-        window.renderTabNodes();
+        if (typeof window.renderTabNodes === "function") window.renderTabNodes();
     };
 
     window.autoCheckNodesHealth = async function () {

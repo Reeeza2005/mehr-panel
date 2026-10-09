@@ -2,11 +2,10 @@ name = "mehr"
 main = "_worker.js"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
-# account_id = "YOUR_CLOUDFLARE_ACCOUNT_ID"
 
 [[rules]]
 type = "Text"
-globs = ["**/*.html", "**/*.css", "**/*.js"]
+globs = ["**/*.html", "**/*.css"]
 fallthrough = true
 
 [[d1_databases]]

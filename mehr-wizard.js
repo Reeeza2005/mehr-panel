@@ -254,7 +254,7 @@ async function deployEdgeNode(token, accountId, nodeName) {
     const nodeApiKey = await getOrGenerateApiKey(accountId, token, nodeName);
     const agentSource = await fetchFromGithub("mehr-agent.js");
     const agentVerMatch = agentSource.match(/const AGENT_VERSION = ["']([^"']+)["']/);
-    const deployedAgentVersion = agentVerMatch ? agentVerMatch[1] : WIZARD_VERSION;
+    const deployedAgentVersion = agentVerMatch ? agentVerMatch[1] : "1.6.2";
 
     // متغیرهای کاملاً مستقل: فقط شناسه، کلید کنترل و مشخصات برای آمارگیری کلادفلر
     const edgeBindings = [
@@ -710,7 +710,7 @@ function getWizardHtml(version = WIZARD_VERSION) {
                     status.className = "status success";
                     status.innerText = "استقرار با موفقیت انجام شد!";
                     document.getElementById("resUrl").innerText = data.data.url;
-                    if (document.getElementById("resVersion")) document.getElementById("resVersion").innerText = "v" + (data.data.version || "4.0.0");
+                    if (document.getElementById("resVersion")) document.getElementById("resVersion").innerText = "v" + (data.data.version || (currentDeployType === "node" ? "1.6.2" : "4.0.0"));
                     
                     const keyBox = document.getElementById("keyBox");
                     const resultDesc = document.getElementById("resultDesc");

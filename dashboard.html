@@ -3479,22 +3479,31 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                       let testData = (testRes && testRes.ok) ? await testRes.json().catch(() => null) : null;
                       if (!testData) {
                           let directRes = await fetch(target.replace(/\/+$/, "") + "/api/status", { signal: AbortSignal.timeout(3500) }).catch(() => null);
-                          if (directRes && directRes.ok) {
-                              testData = { state: "healthy", latency: Date.now() - st };
-                          } else if (directRes && directRes.status === 500) {
+                          if (directRes && directRes.status === 200) {
+                              const dj = await directRes.json().catch(() => null);
+                              if (dj && (dj.status === "online" || dj.protocols || dj.node_id)) {
+                                  testData = { state: "healthy", latency: Date.now() - st };
+                              } else {
+                                  testData = { state: "dead", latency: 0 };
+                              }
+                          } else if (directRes && (directRes.status === 500 || directRes.status === 522)) {
                               testData = { state: "restricted", latency: Date.now() - st };
                           } else {
                               testData = { state: "dead", latency: 0 };
                           }
                       }
-                      window.clusterNodeStats.nodes[p.url] = {
-                          online: (testData.state === "healthy" && testData.state !== "restricted"),
+                      const hostKey = cleanHost(rawUrl);
+                      const nodePayload = {
+                          online: testData.state === "healthy",
                           state: testData.state,
                           latency: testData.latency || (Date.now() - st),
                           totalBytes: 0,
                           country: testData.country || "",
                           colo: testData.colo || ""
                       };
+                      window.clusterNodeStats.nodes[rawUrl] = nodePayload;
+                      window.clusterNodeStats.nodes[hostKey] = nodePayload;
+                      window.clusterNodeStats.nodes[hostKey.toLowerCase()] = nodePayload;
                   } catch(e) {
                       clearTimeout(t);
                       window.clusterNodeStats.nodes[p.url] = { online: false, latency: 0, totalBytes: 0 };

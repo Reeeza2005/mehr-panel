@@ -412,9 +412,10 @@ export default {
                       reqHeaders["Authorization"] = "Bearer " + testKey;
                       reqHeaders["X-Node-Key"] = testKey;
                   }
+                  // ۱. تست لایه اول: استعلام مستقیم ایجنت HTTP
                   const res = await fetch("https://" + clean + "/api/status", {
                       headers: reqHeaders,
-                      signal: AbortSignal.timeout(4500)
+                      signal: AbortSignal.timeout(4000)
                   });
                   lat = Date.now() - tStart;
                   httpStatus = res.status;
@@ -422,6 +423,28 @@ export default {
                   const cfRay = res.headers.get("cf-ray") || "";
                   colo = cfRay.includes("-") ? cfRay.split("-").pop().trim().toUpperCase() : "";
                   country = res.headers.get("cf-ipcountry") || (res.cf && res.cf.country) || "";
+
+                  // ۲. تست لایه دوم: ارزیابی پاسخ پروتکل وب‌سوکت نود
+                  let wsWorking = false;
+                  if (res.status === 200) {
+                      try {
+                          const wsRes = await fetch("https://" + clean + "/", {
+                              headers: {
+                                  "Upgrade": "websocket",
+                                  "Connection": "Upgrade",
+                                  "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
+                                  "Sec-WebSocket-Version": "13"
+                              },
+                              signal: AbortSignal.timeout(3000)
+                          }).catch(() => null);
+                          // در کلادفلر درخواست آپگرید سوکت کد 101 یا پاسخ متصل بازمی‌گرداند
+                          if (wsRes && (wsRes.status === 101 || wsRes.webSocket || wsRes.status === 200)) {
+                              wsWorking = true;
+                          }
+                      } catch (e) {
+                          wsWorking = false;
+                      }
+                  }
 
                   if (res.status === 200) {
                       try {

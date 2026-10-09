@@ -1,6 +1,6 @@
 import { connect } from "cloudflare:sockets";
 
-const AGENT_VERSION = "1.6.1";
+const AGENT_VERSION = "1.6.2";
 const DEFAULT_PROXY_IP = "bpb.yousefi.isegaro.com";
 
 function safeCloseWebSocket(ws) {

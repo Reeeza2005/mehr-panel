@@ -365,6 +365,66 @@ function jsonResponse(data, status = 200) {
     });
 }
 
+
+
+
+let _schemaInitialized = false;
+async function ensureDatabaseSchema(env) {
+    if (_schemaInitialized) return;
+    const db = env.DB || env.IOT_DB;
+    if (!db) return;
+    try {
+        await db.batch([
+            db.prepare(`CREATE TABLE IF NOT EXISTS users (
+                id TEXT PRIMARY KEY,
+                uuid TEXT UNIQUE,
+                email TEXT,
+                traffic_limit INTEGER DEFAULT 0,
+                used_traffic INTEGER DEFAULT 0,
+                traffic_used INTEGER DEFAULT 0,
+                daily_traffic_limit INTEGER DEFAULT 0,
+                daily_traffic_used INTEGER DEFAULT 0,
+                expiry_date INTEGER DEFAULT 0,
+                status TEXT DEFAULT 'active',
+                created_at INTEGER
+            )`),
+            db.prepare(`CREATE TABLE IF NOT EXISTS nodes (
+                id TEXT PRIMARY KEY,
+                name TEXT,
+                url TEXT,
+                address TEXT,
+                api_key TEXT,
+                status TEXT DEFAULT 'active',
+                country TEXT DEFAULT 'US',
+                daily_requests INTEGER DEFAULT 0,
+                last_reset_date TEXT,
+                last_seen INTEGER DEFAULT 0,
+                created_at INTEGER
+            )`),
+            db.prepare(`CREATE TABLE IF NOT EXISTS node_traffic (
+                user_uuid TEXT,
+                node_id TEXT,
+                bytes_uploaded INTEGER DEFAULT 0,
+                bytes_downloaded INTEGER DEFAULT 0,
+                last_update INTEGER DEFAULT 0,
+                PRIMARY KEY (user_uuid, node_id)
+            )`),
+            db.prepare(`CREATE TABLE IF NOT EXISTS kv_store (
+                key TEXT PRIMARY KEY,
+                value TEXT
+            )`)
+        ]);
+
+        try {
+            await db.prepare("ALTER TABLE users ADD COLUMN used_traffic INTEGER DEFAULT 0").run();
+        } catch(e) {}
+
+        _schemaInitialized = true;
+    } catch (err) {
+        console.error("Auto-Bootstrap D1 error:", err);
+    }
+}
+
 export default {
   async scheduled(event, env, ctx) {
     ctx.waitUntil((async () => {
@@ -378,6 +438,7 @@ export default {
   },
 
     async fetch(request, env, ctx) {
+        await ensureDatabaseSchema(env);
         await loadConfig(env);
         const url = new URL(request.url);
         let reqPath = url.pathname;
@@ -1657,7 +1718,7 @@ if (reqPath === `${routeBase}/api/node/sync` || reqPath === "/api/node/sync" || 
                     uStat.dReqs = (uStat.dReqs || 0) + deltaReqs;
                 }
             }
-            await cachedD1Put(env, "sys_usage", JSON.stringify(sysUsageCache));
+            await d1Put(env, "sys_usage", JSON.stringify(sysUsageCache));
         }
 
         const { results: blocked } = await (env.DB || env.IOT_DB).prepare(
@@ -1747,6 +1808,6 @@ if (reqPath === `${routeBase}/api/node/sync` || reqPath === "/api/node/sync" || 
             });
         }
 
-        return new Response("Mehr Gateway v4.0.1 Ready", { status: 200 });
+        return new Response("Mehr Gateway v4.0.2 Ready", { status: 200 });
     }
 };

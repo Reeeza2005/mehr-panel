@@ -10,3 +10,9 @@ wrangler.node[0-9]*.toml
 node_modules/
 archive_patches/
 *.tmp
+database.sqlite
+schema.sql
+patch_worker.py
+node_modules/
+.wrangler/
+worker-configuration.d.ts

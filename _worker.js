@@ -428,6 +428,25 @@ export default {
                   let wsWorking = false;
                   if (res.status === 200) {
                       try {
+                          const wsRes = await fetch("https://" + clean + "/", {
+                              headers: {
+                                  "Upgrade": "websocket",
+                                  "Connection": "Upgrade",
+                                  "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
+                                  "Sec-WebSocket-Version": "13"
+                              },
+                              signal: AbortSignal.timeout(3000)
+                          }).catch(() => null);
+                          if (wsRes && (wsRes.status === 101 || wsRes.webSocket || wsRes.status === 200)) {
+                              wsWorking = true;
+                          }
+                      } catch (e) {
+                          wsWorking = false;
+                      }
+                  }
+
+                  if (res.status === 200) {
+                      try {
                           details = JSON.parse(bodyText);
                           const isMehrAgent = details && (details.status === "online" || details.protocols || details.node_id);
                           if (isMehrAgent && lat > 0) {

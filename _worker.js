@@ -1600,7 +1600,11 @@ if (reqPath === `${routeBase}/api/node/sync` || reqPath === "/api/node/sync" || 
 
                 if (b.user_traffic && Array.isArray(b.user_traffic)) {
             // ۱. بارگذاری کش مصرف سیستمی جهت نمایش زنده در داشبورد
-            if (!sysUsageCache) sysUsageCache = { users: {} };
+            let sysUsageCache = { users: {} };
+            try {
+                const rawCache = await d1Get(env, "sys_usage");
+                if (rawCache) sysUsageCache = JSON.parse(rawCache);
+            } catch(e) {}
             if (!sysUsageCache.users) sysUsageCache.users = {};
             const todayStr = new Date().toISOString().split("T")[0];
 

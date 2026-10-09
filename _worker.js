@@ -395,7 +395,7 @@ export default {
                       headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
                   });
               }
-              const clean = testHost.replace(/^[a-zA-Z]+:\/\//, "").split("/")[0].split("@").pop().split(":")[0];
+              const clean = testHost.trim().replace(/^[a-zA-Z]+:\/\//, "").split("/")[0].split("@").pop().split(":")[0].trim();
               const tStart = Date.now();
               let state = "dead"; // healthy | restricted | dead
               let ok = false;
@@ -426,7 +426,7 @@ export default {
                   if (res.status === 200) {
                       try {
                           details = JSON.parse(bodyText);
-                          if (details && (details.status === "online" || details.status === "active")) {
+                          if (details && (details.status === "online" || details.status === "active" || details.ok === true || details.protocols)) {
                               state = "healthy";
                               ok = true;
                           } else {

@@ -1,4 +1,4 @@
-const WIZARD_VERSION = "1.6.3";
+const WIZARD_VERSION = "1.6.4";
 // =============================================================================
 // Mehr Autonomous Deployment Wizard (Standalone Master & Edge Architecture)
 // =============================================================================
@@ -240,10 +240,14 @@ async function deployMasterPanel(token, accountId, panelName) {
     await enableWorkerSubdomain(accountId, token, panelName);
     const finalUrl = await getWorkerUrl(accountId, token, panelName, true);
 
+    const masterVerMatch = masterWorkerSource.match(/const CURRENT_VERSION = ["']([^"']+)["']/);
+    const deployedMasterVersion = masterVerMatch ? masterVerMatch[1] : "4.0.2";
+
     return jsonRes(true, "پنل اصلی با موفقیت مستقر شد.", {
         type: "master",
         url: finalUrl,
-        name: panelName
+        name: panelName,
+        version: deployedMasterVersion
     });
 }
 
@@ -710,7 +714,7 @@ function getWizardHtml(version = WIZARD_VERSION) {
                     status.className = "status success";
                     status.innerText = "استقرار با موفقیت انجام شد!";
                     document.getElementById("resUrl").innerText = data.data.url;
-                    if (document.getElementById("resVersion")) document.getElementById("resVersion").innerText = "v" + (data.data.version || (currentDeployType === "node" ? "1.6.2" : "4.0.0"));
+                    if (document.getElementById("resVersion")) document.getElementById("resVersion").innerText = "v" + (data.data.version || (currentDeployType === "node" ? "1.6.2" : "4.0.2"));
                     
                     const keyBox = document.getElementById("keyBox");
                     const resultDesc = document.getElementById("resultDesc");

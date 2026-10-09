@@ -431,7 +431,7 @@ html.dark select option {
 
       <!-- Global Controls -->
       <div class="fixed top-4 end-4 md:top-5 md:end-5 flex items-center gap-2 z-50">
-          <span id="top-version-badge" class="hidden md:inline-block px-3 py-1.5 rounded-xl text-[11px] font-mono font-bold" style="background: color-mix(in srgb, var(--color-primary) 12%, transparent); border: 1px solid color-mix(in srgb, var(--color-primary) 25%, transparent); color: var(--color-primary);">v3.5.0</span>
+          <span id="top-version-badge" class="hidden md:inline-block px-3 py-1.5 rounded-xl text-[11px] font-mono font-bold" style="background: color-mix(in srgb, var(--color-primary) 12%, transparent); border: 1px solid color-mix(in srgb, var(--color-primary) 25%, transparent); color: var(--color-primary);">v4.0.0</span>
           <a href="https://github.com/Reeeza2005/mehr-panel" id="github-link-btn" target="_blank" class="hidden md:inline-flex btn-top-bar p-2 rounded-xl transition-all" style="background: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-text-muted);">
               <svg class="w-4 h-4" style="width:16px;height:16px;min-width:16px;" fill="currentColor" viewBox="0 0 24 24"><path fill-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clip-rule="evenodd"></path></svg>
           </a>
@@ -3473,15 +3473,21 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                   const t = setTimeout(() => ctl.abort(), 5000);
                   const st = Date.now();
                   try {
-                      let res = await fetch(target.replace(/\/+$/, "") + "/api/status", {
-                          headers: { "Authorization": "Bearer " + token },
-                          signal: ctl.signal
-                      }).catch(() => null);
+                      const hostParam = encodeURIComponent(target);
+                      let testRes = await fetch(`/api/test-node?host=${hostParam}`, { signal: ctl.signal }).catch(() => null);
                       clearTimeout(t);
-                      if (res && res.ok) {
-                          window.clusterNodeStats.nodes[p.url] = { online: true, latency: Date.now() - st, totalBytes: 0 };
+                      if (testRes && testRes.ok) {
+                          const testData = await testRes.json().catch(() => ({ state: "dead" }));
+                          window.clusterNodeStats.nodes[p.url] = {
+                              online: testData.state === "healthy",
+                              state: testData.state,
+                              latency: testData.latency || (Date.now() - st),
+                              totalBytes: 0,
+                              country: testData.country,
+                              colo: testData.colo
+                          };
                       } else {
-                          window.clusterNodeStats.nodes[p.url] = { online: false, latency: 0, totalBytes: 0 };
+                          window.clusterNodeStats.nodes[p.url] = { online: false, state: "dead", latency: 0, totalBytes: 0 };
                       }
                   } catch(e) {
                       clearTimeout(t);
@@ -5812,16 +5818,12 @@ window.renderTabNodes = function () {
                     <div class="space-y-3">
                         <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-darkborder/60">
                             <div class="flex items-center gap-2">
-                                <span class="w-2.5 h-2.5 rounded-full ${st.blocked ? "bg-red-600 animate-pulse" : (st.ws_ok === false && isOnline ? "bg-amber-500" : (isOnline ? "bg-emerald-500" : "bg-rose-500"))}"></span>
-                                <h3 class="text-sm font-bold text-slate-800 dark:text-white flex items-center gap-1.5">
-                                    <span>نود ${idx + 1}: ${p.name || (host ? host.split(".")[0] : "Edge")}</span>
+                                <span class="w-2.5 h-2.5 rounded-full ${st.state === "healthy" ? "bg-emerald-500" : (st.state === "restricted" ? "bg-amber-500 animate-pulse" : "bg-rose-500")}"></span>
                                     <span class="text-base" title="${country || "Cloudflare Global"}">${flagEmoji || "🌐"}</span>
                                     <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-200 dark:bg-darkborder text-slate-700 dark:text-slate-300 font-mono font-bold">${country || "EDGE"}</span>
                                 </h3>
                             </div>
-                            <span class="px-2.5 py-1 text-xs font-bold rounded-lg ${isOnline ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-rose-500/10 text-rose-500"}">
-                                ${st.blocked ? "بلاک کلادفلر" : (st.ws_ok === false && isOnline ? "وب‌سوکت قطع" : (isOnline ? "آنلاین" : "قطع ارتباط"))}
-                            </span>
+                            <span class="px-2.5 py-1 text-xs font-bold rounded-lg ${st.state === "healthy" ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : (st.state === "restricted" ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30" : "bg-rose-500/10 text-rose-500")}">${st.state === "healthy" ? "🟢 آنلاین" : (st.state === "restricted" ? "🟡 محدود شده / ۱۱۰۱" : "🔴 قطع ارتباط")}</span>
                         </div>
 
                         <div class="text-xs font-mono text-slate-700 dark:text-slate-200 break-all bg-slate-50 dark:bg-darkcard/80 p-2.5 rounded-xl border border-slate-200 dark:border-darkborder flex items-center justify-between">

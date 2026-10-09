@@ -389,47 +389,73 @@ export default {
         
           if (reqPath === "/api/test-node") {
               const testHost = url.searchParams.get("host") || "";
-              if (!testHost) return new Response(JSON.stringify({ ok: false, error: "no_host" }), { status: 400, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } });
-              const clean = testHost.replace(/^[a-zA-Z]+:\/\//, "").split("/")[0].split("@").pop().split(":")[0];
-              try {
-                  const tStart = Date.now();
-                  let ok = false;
-                  let lat = 0;
-                  let country = "";
-                  let colo = "";
-                  let isBlocked = false;
-
-                  try {
-                      const res = await fetch("https://" + clean + "/favicon.ico", {
-                          headers: { "User-Agent": "Mozilla/5.0" },
-                          signal: AbortSignal.timeout(4000)
-                      });
-                      lat = Date.now() - tStart;
-                      ok = res.status < 500;
-                      const cfRay = res.headers.get("cf-ray") || "";
-                      colo = cfRay.includes("-") ? cfRay.split("-").pop().trim().toUpperCase() : "";
-                      country = res.headers.get("cf-ipcountry") || (res.cf && res.cf.country) || "";
-                      if (res.status === 403 || res.status === 530) isBlocked = true;
-                  } catch (netErr) {
-                      // در صورت کرش fetch در محیط لوکال workerd
-                      ok = true;
-                      lat = 120;
-                  }
-
-                  return new Response(JSON.stringify({
-                      ok: ok,
-                      latency: lat || 120,
-                      ws_ok: true,
-                      blocked: isBlocked,
-                      country: country,
-                      colo: colo
-                  }), { status: 200, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } });
-              } catch (e) {
-                  return new Response(JSON.stringify({ ok: true, latency: 120, ws_ok: true, blocked: false }), {
-                      status: 200,
+              if (!testHost) {
+                  return new Response(JSON.stringify({ ok: false, state: "dead", error: "no_host" }), {
+                      status: 400,
                       headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
                   });
               }
+              const clean = testHost.replace(/^[a-zA-Z]+:\/\//, "").split("/")[0].split("@").pop().split(":")[0];
+              const tStart = Date.now();
+              let state = "dead"; // healthy | restricted | dead
+              let ok = false;
+              let lat = 0;
+              let country = "";
+              let colo = "";
+              let httpStatus = 0;
+              let details = null;
+
+              try {
+                  const res = await fetch("https://" + clean + "/api/status", {
+                      headers: { "User-Agent": "Mehr-HealthChecker/2.0" },
+                      signal: AbortSignal.timeout(4500)
+                  });
+                  lat = Date.now() - tStart;
+                  httpStatus = res.status;
+                  const bodyText = await res.text();
+                  const cfRay = res.headers.get("cf-ray") || "";
+                  colo = cfRay.includes("-") ? cfRay.split("-").pop().trim().toUpperCase() : "";
+                  country = res.headers.get("cf-ipcountry") || (res.cf && res.cf.country) || "";
+
+                  if (res.status === 200) {
+                      try {
+                          details = JSON.parse(bodyText);
+                          if (details && (details.status === "online" || details.status === "active")) {
+                              state = "healthy";
+                              ok = true;
+                          } else {
+                              state = "restricted";
+                          }
+                      } catch (err) {
+                          state = "restricted";
+                      }
+                  } else if (res.status === 500 || bodyText.includes("error code: 1101") || bodyText.includes("Worker threw exception")) {
+                      state = "restricted";
+                      ok = false;
+                  } else {
+                      state = "dead";
+                      ok = false;
+                  }
+              } catch (netErr) {
+                  state = "dead";
+                  ok = false;
+                  lat = 0;
+              }
+
+              return new Response(JSON.stringify({
+                  ok: ok,
+                  state: state,
+                  latency: lat,
+                  http_status: httpStatus,
+                  ws_ok: state === "healthy",
+                  blocked: state === "restricted",
+                  country: country,
+                  colo: colo,
+                  details: details
+              }), {
+                  status: 200,
+                  headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
+              });
           }
 
         if (request.method === "OPTIONS") {
@@ -1027,7 +1053,7 @@ export default {
                             users: {},
                             system: { cpu: 10, memory: 25, uptime: 99999 }
                         },
-                        version: typeof CURRENT_VERSION !== "undefined" ? CURRENT_VERSION : "3.5.0"
+                        version: typeof CURRENT_VERSION !== "undefined" ? CURRENT_VERSION : "4.0.0"
                     });
                 }
                 return jsonResponse({ success: false, message: "Invalid Key" }, 401);
@@ -1275,7 +1301,7 @@ export default {
                     totalRequests: cfUsageData ? cfUsageData.totalRequests : 0,
                     dailyRequests: cfUsageData ? cfUsageData.totalRequests : 0
                 },
-                    system: { activeConnections: activeFinal, version: "3.5.0", cpu: 10, memory: 25 },
+                    system: { activeConnections: activeFinal, version: "4.0.0", cpu: 10, memory: 25 },
                     usage: dynamicUsage
                 }
             });
@@ -1660,6 +1686,6 @@ if (reqPath === `${routeBase}/api/node/sync` || reqPath === "/api/node/sync" || 
             });
         }
 
-        return new Response("Mehr Gateway v3.0.2 Ready", { status: 200 });
+        return new Response("Mehr Gateway v4.0.0 Ready", { status: 200 });
     }
 };

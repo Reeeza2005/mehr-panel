@@ -3499,7 +3499,8 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                           latency: testData.latency || (Date.now() - st),
                           totalBytes: 0,
                           country: testData.country || "",
-                          colo: testData.colo || ""
+                          colo: testData.colo || "",
+                          daily_requests: testData.details?.daily_requests ?? testData.daily_requests ?? 0
                       };
                       window.clusterNodeStats.nodes[rawUrl] = nodePayload;
                       window.clusterNodeStats.nodes[hostKey] = nodePayload;
@@ -5605,7 +5606,8 @@ function buildModeCheckboxes(wrapId, userMode) {
                         state: data.state, // healthy | restricted | dead
                         latency: data.latency || "--",
                         country: data.country || "",
-                        colo: data.colo || ""
+                        colo: data.colo || "",
+                        daily_requests: data.details?.daily_requests ?? data.daily_requests ?? 0
                     };
                 }
             }
@@ -5633,6 +5635,7 @@ function buildModeCheckboxes(wrapId, userMode) {
             state: res.state,
             latency: res.latency,
             totalBytes: 0,
+            daily_requests: res.daily_requests ?? 0,
             country: res.country || "",
             colo: res.colo || ""
         };

@@ -1,7 +1,61 @@
 import { connect } from "cloudflare:sockets";
 
-const AGENT_VERSION = "1.6.2";
+const AGENT_VERSION = "1.6.3";
 const DEFAULT_PROXY_IP = "bpb.yousefi.isegaro.com";
+
+let cachedDailyRequests = null;
+let lastAnalyticsFetchTime = 0;
+
+async function getAccountDailyRequests(env) {
+  const accountId = env.CF_ACCOUNT_ID;
+  const token = env.CF_API_TOKEN;
+  if (!accountId || !token) return 0;
+
+  const now = Date.now();
+  // کش ۵ دقیقه‌ای برای صرفه‌جویی در درخواست‌های API
+  if (cachedDailyRequests !== null && (now - lastAnalyticsFetchTime) < 300000) {
+    return cachedDailyRequests;
+  }
+
+  try {
+    const since = new Date(now - 86400000).toISOString();
+    const query = `query {
+      viewer {
+        accounts(filter: {accountTag: "${accountId}"}) {
+          workersInvocationsAdaptive(limit: 1, filter: {datetime_geq: "${since}"}) {
+            sum { requests }
+          }
+          pagesFunctionsInvocationsAdaptiveGroups(limit: 1, filter: {datetime_geq: "${since}"}) {
+            sum { requests }
+          }
+        }
+      }
+    }`;
+
+    const res = await fetch("https://api.cloudflare.com/client/v4/graphql", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ query }),
+      signal: AbortSignal.timeout(4000)
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      const acc = data?.data?.viewer?.accounts?.[0];
+      const workersReq = Number(acc?.workersInvocationsAdaptive?.[0]?.sum?.requests || 0);
+      const pagesReq = Number(acc?.pagesFunctionsInvocationsAdaptiveGroups?.[0]?.sum?.requests || 0);
+      cachedDailyRequests = workersReq + pagesReq;
+      lastAnalyticsFetchTime = now;
+      return cachedDailyRequests;
+    }
+  } catch (e) {}
+
+  return cachedDailyRequests !== null ? cachedDailyRequests : 0;
+}
+
 
 function safeCloseWebSocket(ws) {
   try {
@@ -270,11 +324,13 @@ export default {
       }
 
       if (url.pathname === "/api/status") {
+        const dailyRequests = await getAccountDailyRequests(env);
         return new Response(JSON.stringify({
           status: "online",
           node_id: env.NODE_ID || "node-edge-3",
           version: AGENT_VERSION,
-          protocols: ["vless", "trojan"]
+          protocols: ["vless", "trojan"],
+          daily_requests: dailyRequests
         }), {
           headers: { "Content-Type": "application/json" }
         });

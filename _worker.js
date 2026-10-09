@@ -1330,7 +1330,7 @@ export default {
                     totalRequests: cfUsageData ? cfUsageData.totalRequests : 0,
                     dailyRequests: cfUsageData ? cfUsageData.totalRequests : 0
                 },
-                    system: { activeConnections: activeFinal, version: "4.0.0", cpu: 10, memory: 25 },
+                    system: { activeConnections: activeFinal, version: "4.0.1", cpu: 10, memory: 25 },
                     usage: dynamicUsage
                 }
             });
@@ -1715,6 +1715,6 @@ if (reqPath === `${routeBase}/api/node/sync` || reqPath === "/api/node/sync" || 
             });
         }
 
-        return new Response("Mehr Gateway v4.0.0 Ready", { status: 200 });
+        return new Response("Mehr Gateway v4.0.1 Ready", { status: 200 });
     }
 };

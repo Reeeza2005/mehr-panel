@@ -405,9 +405,15 @@ export default {
               let httpStatus = 0;
               let details = null;
 
+              const testKey = url.searchParams.get("key") || "";
               try {
+                  const reqHeaders = { "User-Agent": "Mehr-HealthChecker/2.0" };
+                  if (testKey) {
+                      reqHeaders["Authorization"] = "Bearer " + testKey;
+                      reqHeaders["X-Node-Key"] = testKey;
+                  }
                   const res = await fetch("https://" + clean + "/api/status", {
-                      headers: { "User-Agent": "Mehr-HealthChecker/2.0" },
+                      headers: reqHeaders,
                       signal: AbortSignal.timeout(4500)
                   });
                   lat = Date.now() - tStart;

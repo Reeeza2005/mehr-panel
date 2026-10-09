@@ -3474,7 +3474,7 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                   const st = Date.now();
                   try {
                       const hostParam = encodeURIComponent(target);
-                      let testRes = await fetch(`/api/test-node?host=${hostParam}`, { signal: ctl.signal }).catch(() => null);
+                      let testRes = await fetch(`/api/test-node?host=${hostParam}&key=${encodeURIComponent(token || "")}`, { signal: ctl.signal }).catch(() => null);
                       clearTimeout(t);
                       if (testRes && testRes.ok) {
                           const testData = await testRes.json().catch(() => ({ state: "dead" }));

@@ -1,9 +1,9 @@
 {
-  "version": "1.6.1",
+  "version": "4.0.0",
   "components": {
-    "wizard": "1.6.1",
-    "agent": "1.6.1",
-    "master": "1.5.7"
+    "wizard": "4.0.0",
+    "agent": "4.0.0",
+    "master": "4.0.0"
   },
-  "updated_at": "2026-10-08"
+  "updated_at": "2026-10-09"
 }

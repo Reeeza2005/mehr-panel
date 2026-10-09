@@ -303,7 +303,7 @@ function getAllProfiles(targetSub = null) {
 import { connect } from "cloudflare:sockets";
 import HTML_CONTENT from "./dashboard.html";
 
-const CURRENT_VERSION = "3.5.5";
+const CURRENT_VERSION = "4.0.2";
 
 const SYSTEM_DEFAULTS = {
     upstreamUri: "",

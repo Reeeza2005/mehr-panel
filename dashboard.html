@@ -2354,7 +2354,7 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
               return finalLoaderCode;
           }
 
-          const CURRENT_VERSION = "3.0.3";
+          const CURRENT_VERSION = "4.0.2";
           const i18n = {
               en: {
                   tab_servers: "Servers",
@@ -3468,7 +3468,7 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
               await Promise.all(panels.map(async (p) => {
                   const rawUrl = (p.url || "").trim();
                   const target = rawUrl.startsWith("http") ? rawUrl : "https://" + rawUrl;
-                  const token = p.apiKey || p.api_key || window.nahanConfig?.clusterKey || "mehr_cluster_key_2026";
+                  const token = p.apiKey || p.api_key || window.nahanConfig?.clusterKey || "";
                   const ctl = new AbortController();
                   const t = setTimeout(() => ctl.abort(), 5000);
                   const st = Date.now();
@@ -5594,7 +5594,7 @@ function buildModeCheckboxes(wrapId, userMode) {
     async function pingHost(host, timeoutMs = 4000) {
         try {
             const clean = (host || "").trim().replace(/^https?:\/\//i, "").split("/")[0].split(":")[0];
-            const token = window.nahanConfig?.clusterKey || "mehr_cluster_key_2026";
+            const token = window.nahanConfig?.clusterKey || "";
             const targetUrl = `/api/test-node?host=${encodeURIComponent("https://" + clean)}&key=${encodeURIComponent(token)}`;
             const res = await fetch(targetUrl, { signal: AbortSignal.timeout(timeoutMs) }).catch(() => null);
             if (res && res.ok) {

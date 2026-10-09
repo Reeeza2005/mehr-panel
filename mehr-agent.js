@@ -1,7 +1,39 @@
 import { connect } from "cloudflare:sockets";
 
-const AGENT_VERSION = "1.6.3";
+const AGENT_VERSION = "1.6.4";
 const DEFAULT_PROXY_IP = "bpb.yousefi.isegaro.com";
+
+async function reportTrafficToMaster(env, userUuid, upBytes, downBytes) {
+  const masterUrl = env.MASTER_URL || env.PANEL_URL;
+  const apiKey = env.API_KEY;
+  const nodeId = env.NODE_ID || "node-edge-3";
+
+  if (!masterUrl || !userUuid || (upBytes <= 0 && downBytes <= 0)) return;
+
+  try {
+    const cleanUrl = masterUrl.replace(/\/+$/, '');
+    await fetch(`${cleanUrl}/api/node/sync`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Node-Key": apiKey || ""
+      },
+      body: JSON.stringify({
+        node_id: nodeId,
+        requests_delta: 1,
+        user_traffic: [
+          {
+            uuid: userUuid,
+            up: upBytes,
+            down: downBytes
+          }
+        ]
+      }),
+      signal: AbortSignal.timeout(4000)
+    });
+  } catch (e) {}
+}
+
 
 let cachedDailyRequests = null;
 let lastAnalyticsFetchTime = 0;
@@ -101,9 +133,16 @@ function makeWebSocketReadableStream(ws, earlyDataHeader) {
 // -------------------------------------------------------------
 // پارس هدر VLESS
 // -------------------------------------------------------------
+function stringifyUuid(buf) {
+  const bytes = new Uint8Array(buf);
+  const hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
+}
+
 function parseVlessHeader(buffer) {
   if (buffer.byteLength < 24) return { hasError: true, message: "Invalid VLESS header size" };
   const version = new Uint8Array(buffer.slice(0, 1));
+  const userUuid = stringifyUuid(buffer.slice(1, 17));
   const optLength = new Uint8Array(buffer.slice(17, 18))[0];
   const cmd = new Uint8Array(buffer.slice(18 + optLength, 18 + optLength + 1))[0];
   const isUDP = cmd === 2;
@@ -147,7 +186,8 @@ function parseVlessHeader(buffer) {
     rawDataIndex: rawDataIdx,
     version,
     isUDP,
-    protocol: "vless"
+    protocol: "vless",
+    userUuid
   };
 }
 
@@ -221,11 +261,13 @@ function parseProxyHeader(buffer) {
   return parseVlessHeader(buffer);
 }
 
-async function pipeTcpToWebSocket(tcpSocket, ws, responseHeader) {
+async function pipeTcpToWebSocket(tcpSocket, ws, responseHeader, onDownBytes) {
   let headerSent = !responseHeader;
   const writer = new WritableStream({
     async write(chunk) {
       if (ws.readyState !== 1) return;
+      const bLen = chunk.byteLength || 0;
+      if (typeof onDownBytes === "function" && bLen > 0) onDownBytes(bLen);
       if (!headerSent) {
         ws.send(await new Blob([responseHeader, chunk]).arrayBuffer());
         headerSent = true;
@@ -249,7 +291,7 @@ async function pipeTcpToWebSocket(tcpSocket, ws, responseHeader) {
   }
 }
 
-async function handleProxyWebSocket(request) {
+async function handleProxyWebSocket(request, env, ctx) {
   const wsPair = new WebSocketPair();
   const [clientWs, serverWs] = Object.values(wsPair);
   serverWs.accept();
@@ -259,10 +301,27 @@ async function handleProxyWebSocket(request) {
   const readableStream = makeWebSocketReadableStream(serverWs, earlyDataHeader);
 
   let tcpHolder = { value: null };
+  let trackedUuid = null;
+  let totalUpBytes = 0;
+  let totalDownBytes = 0;
+
+  const flushTraffic = () => {
+    if (trackedUuid && (totalUpBytes > 0 || totalDownBytes > 0) && env) {
+      const up = totalUpBytes;
+      const down = totalDownBytes;
+      totalUpBytes = 0;
+      totalDownBytes = 0;
+      const syncPromise = reportTrafficToMaster(env, trackedUuid, up, down);
+      if (ctx && typeof ctx.waitUntil === "function") {
+        ctx.waitUntil(syncPromise);
+      }
+    }
+  };
 
   const writableStream = new WritableStream({
     async write(chunk) {
       if (tcpHolder.value) {
+        totalUpBytes += (chunk.byteLength || 0);
         const tcpWriter = tcpHolder.value.writable.getWriter();
         await tcpWriter.write(chunk);
         tcpWriter.releaseLock();
@@ -274,7 +333,9 @@ async function handleProxyWebSocket(request) {
         throw new Error(parsed.message);
       }
 
+      trackedUuid = parsed.userUuid || null;
       const clientData = chunk.byteLength >= parsed.rawDataIndex ? chunk.slice(parsed.rawDataIndex) : new ArrayBuffer(0);
+      if (clientData.byteLength > 0) totalUpBytes += clientData.byteLength;
       const respHeader = parsed.protocol === "vless" ? new Uint8Array([parsed.version[0], 0]) : null;
 
       let sock;
@@ -296,17 +357,22 @@ async function handleProxyWebSocket(request) {
         sockWriter.releaseLock();
       }
 
-      pipeTcpToWebSocket(sock, serverWs, respHeader);
+      pipeTcpToWebSocket(sock, serverWs, respHeader, (downLen) => {
+        totalDownBytes += downLen;
+      });
     },
     close() {
+      flushTraffic();
       if (tcpHolder.value) try { tcpHolder.value.close(); } catch(e) {}
     },
     abort() {
+      flushTraffic();
       if (tcpHolder.value) try { tcpHolder.value.close(); } catch(e) {}
     }
   });
 
   readableStream.pipeTo(writableStream).catch(() => {
+    flushTraffic();
     if (tcpHolder.value) try { tcpHolder.value.close(); } catch(e) {}
   });
 
@@ -320,7 +386,7 @@ export default {
       const upgrade = request.headers.get("Upgrade") || "";
 
       if (upgrade.toLowerCase() === "websocket") {
-        return handleProxyWebSocket(request);
+        return handleProxyWebSocket(request, env, ctx);
       }
 
       if (url.pathname === "/api/status") {

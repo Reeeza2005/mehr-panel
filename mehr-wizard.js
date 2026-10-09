@@ -1,4 +1,4 @@
-const WIZARD_VERSION = "1.6.4";
+const WIZARD_VERSION = "1.6.5";
 // =============================================================================
 // Mehr Autonomous Deployment Wizard (Standalone Master & Edge Architecture)
 // =============================================================================
@@ -261,9 +261,11 @@ async function deployEdgeNode(token, accountId, nodeName) {
     const deployedAgentVersion = agentVerMatch ? agentVerMatch[1] : "1.6.2";
 
     // متغیرهای کاملاً مستقل: فقط شناسه، کلید کنترل و مشخصات برای آمارگیری کلادفلر
+    const currentMasterOrigin = typeof window !== "undefined" && window.location ? window.location.origin : "";
     const edgeBindings = [
         { type: "plain_text", name: "NODE_ID", text: nodeName },
         { type: "plain_text", name: "API_KEY", text: nodeApiKey },
+        { type: "plain_text", name: "MASTER_URL", text: currentMasterOrigin },
         { type: "plain_text", name: "CF_ACCOUNT_ID", text: accountId },
         { type: "plain_text", name: "CF_API_TOKEN", text: token }
     ];

@@ -303,7 +303,7 @@ function getAllProfiles(targetSub = null) {
 import { connect } from "cloudflare:sockets";
 import HTML_CONTENT from "./dashboard.html";
 
-const CURRENT_VERSION = "4.0.2";
+const CURRENT_VERSION = "4.0.3";
 
 const SYSTEM_DEFAULTS = {
     upstreamUri: "",
@@ -1299,23 +1299,39 @@ export default {
             			let dynamicUsage = {};
 			let liveConnectionsCount = (typeof activeConnections !== "undefined" && activeConnections > 0) ? activeConnections : (typeof OPEN_WS !== "undefined" ? OPEN_WS : 0);
 
-            // محاسبه dynamicUsage از جدول users
+            // لود کش مصرف روزانه و کلی سیستم
+            let sysUsageData = null;
+            try {
+                const rawUsage = await d1Get(env, "sys_usage");
+                if (rawUsage) sysUsageData = JSON.parse(rawUsage);
+            } catch(e) {}
+            const todayStr = new Date().toISOString().split("T")[0];
+
+            // محاسبه dynamicUsage از جدول users و ادغام کش روزانه
             let totalBytesAllUsers = 0;
+            let totalDailyBytesAllUsers = 0;
             if (Array.isArray(users)) {
                 users.forEach(u => {
                     const uId = (u.uuid || u.id || "").replace(/-/g, "").toLowerCase();
                     const uTraffic = Number(u.traffic_used || u.used_traffic || u.usedTraffic || 0);
                     totalBytesAllUsers += uTraffic;
-                    if (uId) {
-                        if (!dynamicUsage[uId]) {
-                            dynamicUsage[uId] = {
-                                connects: 1,
-                                bytes: uTraffic,
-                                last: now
-                            };
-                        } else if ((dynamicUsage[uId].bytes || 0) < uTraffic) {
-                            dynamicUsage[uId].bytes = uTraffic;
+
+                    let userDailyBytes = 0;
+                    if (sysUsageData?.users?.[uId]) {
+                        const uCache = sysUsageData.users[uId];
+                        if (uCache.lastDay === todayStr) {
+                            userDailyBytes = Number(uCache.dBytes || 0);
                         }
+                    }
+                    totalDailyBytesAllUsers += userDailyBytes;
+
+                    if (uId) {
+                        dynamicUsage[uId] = {
+                            connects: 1,
+                            bytes: uTraffic,
+                            dBytes: userDailyBytes,
+                            last: now
+                        };
                     }
                 });
             }
@@ -1333,11 +1349,13 @@ export default {
                     users: { total: totalUsers, active: activeUsers, paused: pausedUsers, autoDisabled: autoDisabledUsers, expired: expiredUsers },
                     traffic: {
                     totalGB: (totalBytesAllUsers / (1024 * 1024 * 1024)).toFixed(2),
-                    dailyGB: (totalBytesAllUsers / (1024 * 1024 * 1024)).toFixed(2),
+                    dailyGB: (totalDailyBytesAllUsers / (1024 * 1024 * 1024)).toFixed(2),
+                    totalBytes: totalBytesAllUsers,
+                    dailyBytes: totalDailyBytesAllUsers,
                     totalRequests: cfUsageData ? cfUsageData.totalRequests : 0,
                     dailyRequests: cfUsageData ? cfUsageData.totalRequests : 0
                 },
-                    system: { activeConnections: activeFinal, version: "4.0.1", cpu: 10, memory: 25 },
+                    system: { activeConnections: activeFinal, version: "4.0.3", cpu: 10, memory: 25 },
                     usage: dynamicUsage
                 }
             });
@@ -1385,18 +1403,21 @@ export default {
 
         if (reqPath === `${routeBase}/api/nodes` || reqPath.endsWith("/api/nodes")) {
             if (request.method === "GET") {
+                const startOfDaySec = Math.floor(new Date().setUTCHours(0,0,0,0) / 1000);
                 const { results } = await (env.DB || env.IOT_DB).prepare(`
                     SELECT n.*, 
-                           COALESCE(SUM(nt.bytes_uploaded + nt.bytes_downloaded), 0) AS total_bytes
+                           COALESCE(SUM(nt.bytes_uploaded + nt.bytes_downloaded), 0) AS total_bytes,
+                           COALESCE(SUM(CASE WHEN nt.last_update >= ? THEN (nt.bytes_uploaded + nt.bytes_downloaded) ELSE 0 END), 0) AS today_bytes
                     FROM nodes n
                     LEFT JOIN node_traffic nt ON (nt.node_id = n.id OR nt.node_id LIKE '%' || n.id || '%')
                     GROUP BY n.id
                     ORDER BY n.created_at DESC
-                `).all();
+                `).bind(startOfDaySec).all();
                 const computedNodes = (results || []).map(n => ({
                     ...n,
                     address: n.address || n.url,
                     total_bytes: Number(n.total_bytes || 0),
+                    today_bytes: Number(n.today_bytes || 0),
                     is_online: n.last_seen > 0 && (Math.floor(Date.now() / 1000) - n.last_seen) < 300 && n.status === "active", country: (n.country && n.country.length === 2 ? (n.country.toUpperCase()) : "US"), flag: getCountryFlag(n.country || "US")
                 }));
                 return jsonResponse({ success: true, nodes: computedNodes });

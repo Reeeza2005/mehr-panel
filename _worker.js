@@ -428,35 +428,23 @@ export default {
                   let wsWorking = false;
                   if (res.status === 200) {
                       try {
-                          const wsRes = await fetch("https://" + clean + "/", {
-                              headers: {
-                                  "Upgrade": "websocket",
-                                  "Connection": "Upgrade",
-                                  "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
-                                  "Sec-WebSocket-Version": "13"
-                              },
-                              signal: AbortSignal.timeout(3000)
-                          }).catch(() => null);
-                          // در کلادفلر درخواست آپگرید سوکت کد 101 یا پاسخ متصل بازمی‌گرداند
-                          if (wsRes && (wsRes.status === 101 || wsRes.webSocket || wsRes.status === 200)) {
-                              wsWorking = true;
-                          }
-                      } catch (e) {
-                          wsWorking = false;
-                      }
-                  }
-
-                  if (res.status === 200) {
-                      try {
                           details = JSON.parse(bodyText);
-                          if (details && (details.status === "online" || details.status === "active" || details.ok === true || details.protocols)) {
-                              state = "healthy";
-                              ok = true;
+                          const isMehrAgent = details && (details.status === "online" || details.protocols || details.node_id);
+                          if (isMehrAgent && lat > 0) {
+                              if (wsWorking) {
+                                  state = "healthy";
+                                  ok = true;
+                              } else {
+                                  state = "restricted";
+                                  ok = false;
+                              }
                           } else {
-                              state = "restricted";
+                              state = "dead";
+                              ok = false;
                           }
                       } catch (err) {
-                          state = "restricted";
+                          state = "dead";
+                          ok = false;
                       }
                   } else if (res.status === 500 || bodyText.includes("error code: 1101") || bodyText.includes("Worker threw exception")) {
                       state = "restricted";

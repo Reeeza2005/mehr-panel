@@ -1,6 +1,6 @@
 import { connect } from "cloudflare:sockets";
 
-const AGENT_VERSION = "1.6.8";
+const AGENT_VERSION = "1.6.9";
 const DEFAULT_PROXY_IP = "bpb.yousefi.isegaro.com";
 
 async function reportTrafficToMaster(env, userUuid, upBytes, downBytes) {
@@ -325,9 +325,8 @@ async function handleProxyWebSocket(request, env, ctx) {
     if (!trackedUuid || !env || isSyncing) return;
     // اگر ترافیکی رد و بدل نشده، یا حجم کمتر از 4KB (پینگ تستی) است، هیچ فچ ارسال نکن
     if (totalUpBytes + totalDownBytes < 4096) return;
-    // در زمان بسته شدن نشست هم نباید با فاصله کمتر از 5 ثانیه درخواست جدید برود
+    // در پایان اتصال نباید ترافیک از بین برود
     if (!force && (now - lastSyncTime < SYNC_INTERVAL_MS)) return;
-    if (force && (now - lastSyncTime < 5000)) return;
 
     const up = totalUpBytes;
     const down = totalDownBytes;

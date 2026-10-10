@@ -1,15 +1,10 @@
-name = "mehr-node-1"
+name = "edge-node-1"
 main = "mehr-agent.js"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 workers_dev = true
 
-[[services]]
-binding = "MASTER_SERVICE"
-service = "mehr"
-
 [vars]
-MASTER_URL = "https://mehr.your-subdomain.workers.dev"
-PANEL_URL = "https://mehr.your-subdomain.workers.dev"
-API_KEY = "your-node-api-key"
+PANEL_URL = "https://your-panel.workers.dev"
+API_KEY = "YOUR_PANEL_NODE_API_KEY"
 NODE_ID = "node-1"

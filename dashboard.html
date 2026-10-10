@@ -3492,11 +3492,13 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
                           }
                       }
                       const hostKey = cleanHost(rawUrl);
+                      const prevData = window.clusterNodeStats.nodes[hostKey] || window.clusterNodeStats.nodes[rawUrl] || {};
                       const nodePayload = {
+                          ...prevData,
                           online: testData.state === "healthy",
+                          is_online: testData.state === "healthy",
                           state: testData.state,
                           latency: testData.latency || (Date.now() - st),
-                          totalBytes: 0,
                           country: testData.country || "",
                           colo: testData.colo || "",
                           daily_requests: testData.details?.daily_requests ?? testData.daily_requests ?? 0
@@ -5629,12 +5631,14 @@ function buildModeCheckboxes(wrapId, userMode) {
         window.clusterNodeStats = window.clusterNodeStats || { nodes: {} };
         window.clusterNodeStats.nodes = window.clusterNodeStats.nodes || {};
 
+        const prevNodeObj = window.clusterNodeStats.nodes[clean] || window.clusterNodeStats.nodes["https://" + clean] || {};
         const nodeObj = {
+            ...prevNodeObj,
             online: res.ok,
+            is_online: res.ok,
             state: res.state,
             latency: res.latency,
-            totalBytes: 0,
-            daily_requests: res.daily_requests ?? 0,
+            daily_requests: res.daily_requests ?? prevNodeObj.daily_requests ?? 0,
             country: res.country || "",
             colo: res.colo || ""
         };
@@ -5822,7 +5826,8 @@ window.renderTabNodes = function () {
             const latency = st.latency ? (st.latency + (typeof st.latency === 'number' ? " ms" : "")) : "--";
             const country = st.country || stats[lowHost]?.country || "";
             const flagEmoji = st.flag || getCountryFlagEmoji(country);
-            const dailyReqs = st.daily_requests ?? stats[lowHost]?.daily_requests ?? 0;
+            const nodeObjDb = (window.clusterNodeStats?.nodes && (window.clusterNodeStats.nodes[lowHost] || window.clusterNodeStats.nodes[host] || window.clusterNodeStats.nodes[p.id] || window.clusterNodeStats.nodes[rawUrl])) || {};
+            const dailyReqs = clusterNode.daily_requests ?? nodeObjDb.daily_requests ?? st.daily_requests ?? stats[lowHost]?.daily_requests ?? 0;
 
             let nodeUsers = 0, nodeTotalBytes = 0, nodeTodayBytes = 0;
 			users.forEach(u => {

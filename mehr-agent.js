@@ -325,7 +325,6 @@ async function pipeTcpToWebSocket(tcpSocket, ws, responseHeader, onDownBytes, on
         ws.send(chunk);
       }
     }
-    },
     close() {
       if (typeof onDone === "function") onDone();
       safeCloseWebSocket(ws);

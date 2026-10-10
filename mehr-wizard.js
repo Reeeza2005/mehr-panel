@@ -262,7 +262,13 @@ async function deployEdgeNode(token, accountId, nodeName) {
 
     // متغیرهای کاملاً مستقل: فقط شناسه، کلید کنترل و مشخصات برای آمارگیری کلادفلر
     const currentMasterOrigin = typeof window !== "undefined" && window.location ? window.location.origin : "";
+    // نام ورکر مستر جهت بایندینگ مستقیم (پیش‌فرض mehr یا برگرفته از هاست)
+    const masterWorkerName = (typeof window !== "undefined" && window.location)
+      ? window.location.hostname.split(".")[0]
+      : "mehr";
+
     const edgeBindings = [
+        { type: "service", name: "MASTER_SERVICE", service: masterWorkerName },
         { type: "plain_text", name: "NODE_ID", text: nodeName },
         { type: "plain_text", name: "API_KEY", text: nodeApiKey },
         { type: "plain_text", name: "MASTER_URL", text: currentMasterOrigin },

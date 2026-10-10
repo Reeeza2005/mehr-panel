@@ -1,6 +1,6 @@
 import { connect } from "cloudflare:sockets";
 
-const AGENT_VERSION = "1.6.4";
+const AGENT_VERSION = "1.6.8";
 const DEFAULT_PROXY_IP = "bpb.yousefi.isegaro.com";
 
 async function reportTrafficToMaster(env, userUuid, upBytes, downBytes) {
@@ -11,8 +11,14 @@ async function reportTrafficToMaster(env, userUuid, upBytes, downBytes) {
   if (!masterUrl || !userUuid || (upBytes <= 0 && downBytes <= 0)) return;
 
   try {
-    const cleanUrl = masterUrl.replace(/\/+$/, '');
-    await fetch(`${cleanUrl}/api/node/sync`, {
+    const cleanUrl = masterUrl.replace(/\/+$/, "");
+    
+    const serviceBinding = env.MASTER_SERVICE || env.PANEL_SERVICE;
+    const fetchHandler = (serviceBinding && typeof serviceBinding.fetch === "function") 
+      ? serviceBinding 
+      : { fetch: fetch };
+
+    const resp = await fetchHandler.fetch(`${cleanUrl}/api/node/sync`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -29,11 +35,13 @@ async function reportTrafficToMaster(env, userUuid, upBytes, downBytes) {
           }
         ]
       }),
-      signal: AbortSignal.timeout(4000)
+      signal: AbortSignal.timeout(6000)
     });
-  } catch (e) {}
-}
 
+    } catch (err) {
+    console.log(`[SYNC-ERROR] ${err.name}: ${err.message}`);
+  }
+}
 
 let cachedDailyRequests = null;
 let lastAnalyticsFetchTime = 0;
@@ -71,7 +79,7 @@ async function getAccountDailyRequests(env) {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({ query }),
-      signal: AbortSignal.timeout(4000)
+      signal: AbortSignal.timeout(6000)
     });
 
     if (res.ok) {
@@ -261,7 +269,7 @@ function parseProxyHeader(buffer) {
   return parseVlessHeader(buffer);
 }
 
-async function pipeTcpToWebSocket(tcpSocket, ws, responseHeader, onDownBytes) {
+async function pipeTcpToWebSocket(tcpSocket, ws, responseHeader, onDownBytes, onDone) {
   let headerSent = !responseHeader;
   const writer = new WritableStream({
     async write(chunk) {
@@ -276,9 +284,11 @@ async function pipeTcpToWebSocket(tcpSocket, ws, responseHeader, onDownBytes) {
       }
     },
     close() {
+      if (typeof onDone === "function") onDone();
       safeCloseWebSocket(ws);
     },
     abort() {
+      if (typeof onDone === "function") onDone();
       try { tcpSocket.close(); } catch (e) {}
     }
   });
@@ -286,6 +296,7 @@ async function pipeTcpToWebSocket(tcpSocket, ws, responseHeader, onDownBytes) {
   try {
     await tcpSocket.readable.pipeTo(writer);
   } catch (e) {
+    if (typeof onDone === "function") onDone();
     try { tcpSocket.close(); } catch (err) {}
     safeCloseWebSocket(ws);
   }
@@ -305,16 +316,39 @@ async function handleProxyWebSocket(request, env, ctx) {
   let totalUpBytes = 0;
   let totalDownBytes = 0;
 
-  const flushTraffic = () => {
-    if (trackedUuid && (totalUpBytes > 0 || totalDownBytes > 0) && env) {
-      const up = totalUpBytes;
-      const down = totalDownBytes;
-      totalUpBytes = 0;
-      totalDownBytes = 0;
-      const syncPromise = reportTrafficToMaster(env, trackedUuid, up, down);
-      if (ctx && typeof ctx.waitUntil === "function") {
-        ctx.waitUntil(syncPromise);
-      }
+  let lastSyncTime = Date.now();
+  let isSyncing = false;
+  const SYNC_INTERVAL_MS = 60000; // گزارش دوره‌ای هر ۱ دقیقه یک‌بار جهت محافظت از منابع پلن
+
+  const flushTraffic = (force = false) => {
+    const now = Date.now();
+    if (!trackedUuid || !env || isSyncing) return;
+    // اگر ترافیکی رد و بدل نشده، یا حجم کمتر از 4KB (پینگ تستی) است، هیچ فچ ارسال نکن
+    if (totalUpBytes + totalDownBytes < 4096) return;
+    // در زمان بسته شدن نشست هم نباید با فاصله کمتر از 5 ثانیه درخواست جدید برود
+    if (!force && (now - lastSyncTime < SYNC_INTERVAL_MS)) return;
+    if (force && (now - lastSyncTime < 5000)) return;
+
+    const up = totalUpBytes;
+    const down = totalDownBytes;
+    totalUpBytes = 0;
+    totalDownBytes = 0;
+    lastSyncTime = now;
+    isSyncing = true;
+
+    const syncPromise = reportTrafficToMaster(env, trackedUuid, up, down)
+      .finally(() => {
+        isSyncing = false;
+      });
+
+    if (ctx && typeof ctx.waitUntil === "function") {
+      ctx.waitUntil(syncPromise);
+    }
+  };
+
+  const checkLiveFlush = () => {
+    if (!isSyncing && (Date.now() - lastSyncTime >= SYNC_INTERVAL_MS)) {
+      flushTraffic(false);
     }
   };
 
@@ -357,22 +391,29 @@ async function handleProxyWebSocket(request, env, ctx) {
         sockWriter.releaseLock();
       }
 
-      pipeTcpToWebSocket(sock, serverWs, respHeader, (downLen) => {
+      const tcpToWsPromise = pipeTcpToWebSocket(sock, serverWs, respHeader, (downLen) => {
         totalDownBytes += downLen;
-      });
+        checkLiveFlush();
+      }, () => flushTraffic(true));
+      if (ctx && typeof ctx.waitUntil === "function") {
+        ctx.waitUntil(tcpToWsPromise);
+      }
     },
     close() {
-      flushTraffic();
+      if (tcpWriter) { try { tcpWriter.releaseLock(); } catch(e){} }
+      flushTraffic(true);
       if (tcpHolder.value) try { tcpHolder.value.close(); } catch(e) {}
     },
     abort() {
-      flushTraffic();
+      if (tcpWriter) { try { tcpWriter.releaseLock(); } catch(e){} }
+      flushTraffic(true);
       if (tcpHolder.value) try { tcpHolder.value.close(); } catch(e) {}
     }
   });
 
   readableStream.pipeTo(writableStream).catch(() => {
-    flushTraffic();
+    if (tcpWriter) { try { tcpWriter.releaseLock(); } catch(e){} }
+    flushTraffic(true);
     if (tcpHolder.value) try { tcpHolder.value.close(); } catch(e) {}
   });
 

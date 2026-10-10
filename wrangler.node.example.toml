@@ -2,8 +2,14 @@ name = "mehr-node-1"
 main = "mehr-agent.js"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+[[services]]
+binding = "MASTER_SERVICE"
+service = "mehr"
 
 [vars]
-PANEL_URL = "https://your-master-panel.workers.dev"
-CLUSTER_KEY = "your-custom-cluster-secret"
+MASTER_URL = "https://mehr.your-subdomain.workers.dev"
+PANEL_URL = "https://mehr.your-subdomain.workers.dev"
+API_KEY = "your-node-api-key"
 NODE_ID = "node-1"

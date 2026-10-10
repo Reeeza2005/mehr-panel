@@ -303,7 +303,7 @@ function getAllProfiles(targetSub = null) {
 import { connect } from "cloudflare:sockets";
 import HTML_CONTENT from "./dashboard.html";
 
-const CURRENT_VERSION = "4.0.3";
+const CURRENT_VERSION = "4.0.4";
 
 const SYSTEM_DEFAULTS = {
     upstreamUri: "",
@@ -1416,7 +1416,7 @@ export default {
                     totalRequests: cfUsageData ? cfUsageData.totalRequests : 0,
                     dailyRequests: cfUsageData ? cfUsageData.totalRequests : 0
                 },
-                    system: { activeConnections: activeFinal, version: "4.0.3", cpu: 10, memory: 25 },
+                    system: { activeConnections: activeFinal, version: "4.0.4", cpu: 10, memory: 25 },
                     usage: dynamicUsage
                 }
             });
@@ -1686,18 +1686,21 @@ if (reqPath === `${routeBase}/api/node/sync` || reqPath === "/api/node/sync" || 
                 `).bind(userUuid, nodeId, uUp, uDown, now).run();
 
                 // بروزرسانی ترافیک مصرفی روی خود نود (سرور)
-                if (deltaBytes > 0 && nodeId) {
+                if (nodeId) {
                     try {
+                        const reqDelta = Number(b.requests_delta || 1);
                         await (env.DB || env.IOT_DB).prepare(
-                            "UPDATE nodes SET last_seen = ?, status = 'active' WHERE id = ? OR address LIKE ?"
-                        ).bind(now, nodeId, "%" + nodeId + "%").run();
+                            "UPDATE nodes SET last_seen = ?, status = 'active', daily_requests = daily_requests + ? WHERE id = ? OR address LIKE ?"
+                        ).bind(now, reqDelta, nodeId, "%" + nodeId + "%").run();
                     } catch(e) {}
                 }
 
                 if (deltaBytes > 0) {
-                    await (env.DB || env.IOT_DB).prepare(
-                        "UPDATE users SET used_traffic = used_traffic + ? WHERE uuid = ?"
-                    ).bind(deltaBytes, userUuid).run();
+                    try {
+                        await (env.DB || env.IOT_DB).prepare(
+                            "UPDATE users SET traffic_used = COALESCE(traffic_used, 0) + ?, daily_traffic_used = COALESCE(daily_traffic_used, 0) + ?, used_traffic = COALESCE(used_traffic, 0) + ? WHERE uuid = ?"
+                        ).bind(deltaBytes, deltaBytes, deltaBytes, userUuid).run();
+                    } catch(e) {}
 
                     // به‌روزرسانی ساختار مصرف کاربری برای فرانت‌اند
                     const cleanUuid = String(userUuid).replace(/-/g, "").toLowerCase();

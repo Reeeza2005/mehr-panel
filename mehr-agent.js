@@ -1,22 +1,57 @@
 import { connect } from "cloudflare:sockets";
 
-const AGENT_VERSION = "1.6.9";
+const AGENT_VERSION = "1.7.0";
 const DEFAULT_PROXY_IP = "bpb.yousefi.isegaro.com";
+
+// وضعیت سراسری نود در حافظه
+let blockedUuids = new Set();
+let upstreamConfig = { enabled: false, uri: "" };
+const activeUserSessions = new Map(); // uuid -> connection count
+const MAX_CONCURRENT_USERS = 5;
+
+function parseChainTarget(uri) {
+  if (!uri || typeof uri !== "string") return null;
+  try {
+    let cleanUri = uri.trim();
+    if (cleanUri.startsWith("vmess://")) {
+      const raw = atob(cleanUri.replace("vmess://", ""));
+      const j = JSON.parse(raw);
+      return { host: j.add || j.host, port: parseInt(j.port) || 443 };
+    }
+    const u = new URL(cleanUri);
+    return { host: u.hostname, port: parseInt(u.port) || 443 };
+  } catch(e) {
+    return null;
+  }
+}
 
 async function reportTrafficToMaster(env, userUuid, upBytes, downBytes) {
   const masterUrl = env.MASTER_URL || env.PANEL_URL;
   const apiKey = env.API_KEY;
   const nodeId = env.NODE_ID || "node-edge-3";
 
-  if (!masterUrl || !userUuid || (upBytes <= 0 && downBytes <= 0)) return;
+  if (!masterUrl) return;
 
   try {
     const cleanUrl = masterUrl.replace(/\/+$/, "");
-    
     const serviceBinding = env.MASTER_SERVICE || env.PANEL_SERVICE;
     const fetchHandler = (serviceBinding && typeof serviceBinding.fetch === "function") 
       ? serviceBinding 
       : { fetch: fetch };
+
+    const bodyPayload = {
+      node_id: nodeId,
+      requests_delta: 1,
+      user_traffic: []
+    };
+
+    if (userUuid && (upBytes > 0 || downBytes > 0)) {
+      bodyPayload.user_traffic.push({
+        uuid: userUuid,
+        up: upBytes,
+        down: downBytes
+      });
+    }
 
     const resp = await fetchHandler.fetch(`${cleanUrl}/api/node/sync`, {
       method: "POST",
@@ -24,21 +59,25 @@ async function reportTrafficToMaster(env, userUuid, upBytes, downBytes) {
         "Content-Type": "application/json",
         "X-Node-Key": apiKey || ""
       },
-      body: JSON.stringify({
-        node_id: nodeId,
-        requests_delta: 1,
-        user_traffic: [
-          {
-            uuid: userUuid,
-            up: upBytes,
-            down: downBytes
-          }
-        ]
-      }),
+      body: JSON.stringify(bodyPayload),
       signal: AbortSignal.timeout(6000)
     });
 
-    } catch (err) {
+    if (resp.ok) {
+      try {
+        const syncData = await resp.json();
+        if (syncData && syncData.success) {
+          if (Array.isArray(syncData.blocked_uuids)) {
+            blockedUuids = new Set(syncData.blocked_uuids);
+          }
+          if (syncData.upstream_uri !== undefined) {
+            upstreamConfig.uri = syncData.upstream_uri;
+            upstreamConfig.enabled = Boolean(syncData.use_upstream);
+          }
+        }
+      } catch(_) {}
+    }
+  } catch (err) {
     console.log(`[SYNC-ERROR] ${err.name}: ${err.message}`);
   }
 }
@@ -277,11 +316,15 @@ async function pipeTcpToWebSocket(tcpSocket, ws, responseHeader, onDownBytes, on
       const bLen = chunk.byteLength || 0;
       if (typeof onDownBytes === "function" && bLen > 0) onDownBytes(bLen);
       if (!headerSent) {
-        ws.send(await new Blob([responseHeader, chunk]).arrayBuffer());
+        const merged = new Uint8Array(responseHeader.byteLength + bLen);
+        merged.set(new Uint8Array(responseHeader), 0);
+        merged.set(new Uint8Array(chunk), responseHeader.byteLength);
+        ws.send(merged.buffer);
         headerSent = true;
       } else {
         ws.send(chunk);
       }
+    }
     },
     close() {
       if (typeof onDone === "function") onDone();
@@ -312,20 +355,20 @@ async function handleProxyWebSocket(request, env, ctx) {
   const readableStream = makeWebSocketReadableStream(serverWs, earlyDataHeader);
 
   let tcpHolder = { value: null };
+  let activeTcpWriter = null;
   let trackedUuid = null;
+  let isSessionCounted = false;
   let totalUpBytes = 0;
   let totalDownBytes = 0;
 
   let lastSyncTime = Date.now();
   let isSyncing = false;
-  const SYNC_INTERVAL_MS = 60000; // گزارش دوره‌ای هر ۱ دقیقه یک‌بار جهت محافظت از منابع پلن
+  const SYNC_INTERVAL_MS = 60000;
 
   const flushTraffic = (force = false) => {
     const now = Date.now();
     if (!trackedUuid || !env || isSyncing) return;
-    // اگر ترافیکی رد و بدل نشده، یا حجم کمتر از 4KB (پینگ تستی) است، هیچ فچ ارسال نکن
-    if (totalUpBytes + totalDownBytes < 4096) return;
-    // در پایان اتصال نباید ترافیک از بین برود
+    if (totalUpBytes + totalDownBytes < 4096 && !force) return;
     if (!force && (now - lastSyncTime < SYNC_INTERVAL_MS)) return;
 
     const up = totalUpBytes;
@@ -345,6 +388,28 @@ async function handleProxyWebSocket(request, env, ctx) {
     }
   };
 
+  const cleanupSession = () => {
+    if (activeTcpWriter) {
+      try { activeTcpWriter.releaseLock(); } catch(e){}
+      activeTcpWriter = null;
+    }
+    if (isSessionCounted && trackedUuid) {
+      const cur = activeUserSessions.get(trackedUuid) || 1;
+      if (cur <= 1) {
+        activeUserSessions.delete(trackedUuid);
+      } else {
+        activeUserSessions.set(trackedUuid, cur - 1);
+      }
+      isSessionCounted = false;
+    }
+    flushTraffic(true);
+    if (tcpHolder.value) {
+      try { tcpHolder.value.close(); } catch(e){}
+      tcpHolder.value = null;
+    }
+    safeCloseWebSocket(serverWs);
+  };
+
   const checkLiveFlush = () => {
     if (!isSyncing && (Date.now() - lastSyncTime >= SYNC_INTERVAL_MS)) {
       flushTraffic(false);
@@ -353,11 +418,9 @@ async function handleProxyWebSocket(request, env, ctx) {
 
   const writableStream = new WritableStream({
     async write(chunk) {
-      if (tcpHolder.value) {
+      if (activeTcpWriter) {
         totalUpBytes += (chunk.byteLength || 0);
-        const tcpWriter = tcpHolder.value.writable.getWriter();
-        await tcpWriter.write(chunk);
-        tcpWriter.releaseLock();
+        await activeTcpWriter.write(chunk);
         return;
       }
 
@@ -367,53 +430,67 @@ async function handleProxyWebSocket(request, env, ctx) {
       }
 
       trackedUuid = parsed.userUuid || null;
+
+      // ۱. اعتبارسنجی وضعیت مسدودی کاربر
+      if (trackedUuid && blockedUuids.has(trackedUuid)) {
+        throw new Error("User blocked or quota exceeded");
+      }
+
+      // ۲. کنترل محدودیت ۵ کاربر همزمان در هر نود
+      if (trackedUuid) {
+        const isExistingUser = activeUserSessions.has(trackedUuid);
+        if (!isExistingUser && activeUserSessions.size >= MAX_CONCURRENT_USERS) {
+          throw new Error("Node capacity reached (max 5 concurrent users)");
+        }
+        activeUserSessions.set(trackedUuid, (activeUserSessions.get(trackedUuid) || 0) + 1);
+        isSessionCounted = true;
+      }
+
       const clientData = chunk.byteLength >= parsed.rawDataIndex ? chunk.slice(parsed.rawDataIndex) : new ArrayBuffer(0);
       if (clientData.byteLength > 0) totalUpBytes += clientData.byteLength;
       const respHeader = parsed.protocol === "vless" ? new Uint8Array([parsed.version[0], 0]) : null;
 
       let sock;
+      // ۳. مدیریت اتصال به مقصد یا آپ‌استریم (Proxy Chain)
+      const chainTarget = (upstreamConfig.enabled && upstreamConfig.uri) ? parseChainTarget(upstreamConfig.uri) : null;
+      const destHost = chainTarget ? chainTarget.host : parsed.address;
+      const destPort = chainTarget ? chainTarget.port : parsed.port;
+
       try {
-        sock = connect({ hostname: parsed.address, port: parsed.port });
+        sock = connect({ hostname: destHost, port: destPort });
         tcpHolder.value = sock;
-        const sockWriter = sock.writable.getWriter();
+        activeTcpWriter = sock.writable.getWriter();
         if (clientData.byteLength > 0) {
-          await sockWriter.write(clientData);
+          await activeTcpWriter.write(clientData);
         }
-        sockWriter.releaseLock();
       } catch (err) {
         sock = connect({ hostname: DEFAULT_PROXY_IP, port: parsed.port === 443 ? 443 : 80 });
         tcpHolder.value = sock;
-        const sockWriter = sock.writable.getWriter();
+        activeTcpWriter = sock.writable.getWriter();
         if (clientData.byteLength > 0) {
-          await sockWriter.write(clientData);
+          await activeTcpWriter.write(clientData);
         }
-        sockWriter.releaseLock();
       }
 
       const tcpToWsPromise = pipeTcpToWebSocket(sock, serverWs, respHeader, (downLen) => {
         totalDownBytes += downLen;
         checkLiveFlush();
-      }, () => flushTraffic(true));
+      }, () => cleanupSession());
+
       if (ctx && typeof ctx.waitUntil === "function") {
         ctx.waitUntil(tcpToWsPromise);
       }
     },
     close() {
-      if (tcpWriter) { try { tcpWriter.releaseLock(); } catch(e){} }
-      flushTraffic(true);
-      if (tcpHolder.value) try { tcpHolder.value.close(); } catch(e) {}
+      cleanupSession();
     },
     abort() {
-      if (tcpWriter) { try { tcpWriter.releaseLock(); } catch(e){} }
-      flushTraffic(true);
-      if (tcpHolder.value) try { tcpHolder.value.close(); } catch(e) {}
+      cleanupSession();
     }
   });
 
   readableStream.pipeTo(writableStream).catch(() => {
-    if (tcpWriter) { try { tcpWriter.releaseLock(); } catch(e){} }
-    flushTraffic(true);
-    if (tcpHolder.value) try { tcpHolder.value.close(); } catch(e) {}
+    cleanupSession();
   });
 
   return new Response(null, { status: 101, webSocket: clientWs });

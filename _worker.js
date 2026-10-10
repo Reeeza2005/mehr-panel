@@ -834,8 +834,9 @@ export default {
                     const trafficTag = "📊 مصرف: " + usedGbStr + " از " + limitGbStr;
 
                     let expTag = "⏳ انقضا: نامحدود";
-                    if (targetUser.expiryMs || targetUser.expire_time) {
-                        const expMs = targetUser.expiryMs || targetUser.expire_time;
+                    const rawExp = targetUser.expiryMs || targetUser.expire_time || (targetUser.expiry_date ? (targetUser.expiry_date < 1e11 ? targetUser.expiry_date * 1000 : targetUser.expiry_date) : null);
+                    if (rawExp) {
+                        const expMs = rawExp;
                         const daysLeft = Math.max(0, Math.ceil((expMs - Date.now()) / (1000 * 60 * 60 * 24)));
                         const expDate = new Date(expMs).toISOString().split("T")[0];
                         expTag = "⏳ انقضا: " + expDate + " (" + daysLeft + " روز)";
@@ -1293,15 +1294,25 @@ export default {
 
                             for (const u of sysConfig.users) {
                                 const uid = u.uuid || u.id;
+                                const tLimit = u.traffic_limit ? Number(u.traffic_limit) : (u.limitTotalReq ? Math.floor((Number(u.limitTotalReq) / 6000) * 1073741824) : (u.trafficLimit || 0));
+                                const expSec = u.expiry_date ? Number(u.expiry_date) : (u.expiryMs ? Math.floor(u.expiryMs / 1000) : 0);
+                                const uStatus = u.status || (u.isPaused ? "paused" : "active");
                                 await (env.DB || env.IOT_DB).prepare(`
-                                    INSERT OR REPLACE INTO users (id, uuid, username, name, traffic_limit, used_traffic, status, expiry_date, created_at)
-                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT created_at FROM users WHERE uuid = ?), ?))
+                                    INSERT INTO users (id, uuid, username, name, traffic_limit, used_traffic, status, expiry_date, created_at)
+                                    VALUES (?, ?, ?, ?, ?, COALESCE((SELECT used_traffic FROM users WHERE uuid = ?), 0), ?, ?, COALESCE((SELECT created_at FROM users WHERE uuid = ?), ?))
+                                    ON CONFLICT(id) DO UPDATE SET
+                                        uuid = excluded.uuid,
+                                        username = excluded.username,
+                                        name = excluded.name,
+                                        traffic_limit = excluded.traffic_limit,
+                                        status = excluded.status,
+                                        expiry_date = excluded.expiry_date
                                 `).bind(
                                     uid, uid, u.name, u.name,
-                                    u.trafficLimit || 0,
-                                    u.usedTraffic || 0,
-                                    u.isPaused ? "paused" : "active",
-                                    u.expiryMs ? Math.floor(u.expiryMs / 1000) : 0,
+                                    tLimit,
+                                    uid,
+                                    uStatus,
+                                    expSec,
                                     uid, Math.floor(Date.now() / 1000)
                                 ).run();
                             }
@@ -1725,8 +1736,8 @@ if (reqPath === `${routeBase}/api/node/sync` || reqPath === "/api/node/sync" || 
         }
 
         const { results: blocked } = await (env.DB || env.IOT_DB).prepare(
-                    "SELECT uuid FROM users WHERE status != \"active\" OR (traffic_limit > 0 AND used_traffic >= traffic_limit)"
-                ).all();
+                    "SELECT uuid FROM users WHERE status != \"active\" OR (traffic_limit > 0 AND used_traffic >= traffic_limit) OR (expiry_date > 0 AND expiry_date <= ?)"
+                ).bind(now).all();
 
                 let isNodeUpstreamEnabled = false;
                  if (Array.isArray(sysConfig.linkedPanels)) {
@@ -1738,8 +1749,8 @@ if (reqPath === `${routeBase}/api/node/sync` || reqPath === "/api/node/sync" || 
                  }
 
                                  const { results: activeUsers } = await (env.DB || env.IOT_DB).prepare(
-                    "SELECT uuid FROM users WHERE status = 'active' AND (traffic_limit = 0 OR used_traffic < traffic_limit)"
-                ).all();
+                    "SELECT uuid FROM users WHERE status = 'active' AND (traffic_limit = 0 OR used_traffic < traffic_limit) AND (expiry_date = 0 OR expiry_date > ?)"
+                ).bind(now).all();
 
                 return jsonResponse({
                     success: true,

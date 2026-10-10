@@ -1,9 +1,9 @@
 {
-  "version": "4.0.1",
+  "version": "4.0.2",
   "components": {
-    "panel": "4.0.1",
-    "wizard": "1.6.3",
+    "panel": "4.0.2",
+    "wizard": "1.6.5",
     "agent": "1.6.2"
   },
-  "updated_at": "2026-10-09"
+  "updated_at": "2026-10-10"
 }

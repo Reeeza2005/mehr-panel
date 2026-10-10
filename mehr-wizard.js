@@ -254,18 +254,37 @@ async function deployMasterPanel(token, accountId, panelName) {
 // -----------------------------------------------------------------------------
 // ۲. استقرار نود لبه کاملاً مستقل (Autonomous Edge Node)
 // -----------------------------------------------------------------------------
-async function deployEdgeNode(token, accountId, nodeName) {
+async function deployEdgeNode(token, accountId, nodeName, explicitMaster = "") {
     const nodeApiKey = await getOrGenerateApiKey(accountId, token, nodeName);
     const agentSource = await fetchFromGithub("mehr-agent.js");
     const agentVerMatch = agentSource.match(/const AGENT_VERSION = ["']([^"']+)["']/);
     const deployedAgentVersion = agentVerMatch ? agentVerMatch[1] : "1.6.2";
 
-    // متغیرهای کاملاً مستقل: فقط شناسه، کلید کنترل و مشخصات برای آمارگیری کلادفلر
-    const currentMasterOrigin = typeof window !== "undefined" && window.location ? window.location.origin : "";
-    // نام ورکر مستر جهت بایندینگ مستقیم (پیش‌فرض mehr یا برگرفته از هاست)
-    const masterWorkerName = (typeof window !== "undefined" && window.location)
-      ? window.location.hostname.split(".")[0]
-      : "mehr";
+    // 1. D1-Datenbank des Master-Panels referenzieren
+    const d1Id = await getOrCreateD1(accountId, token, "super_panel_db");
+
+    // 2. Namen und URL des Master-Panels dynamisch ermitteln
+    let masterWorkerName = (explicitMaster || "").trim();
+    if (!masterWorkerName && d1Id) {
+        try {
+            const qRes = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/d1/database/${d1Id}/query`, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                body: JSON.stringify({ sql: "SELECT value FROM kv_store WHERE key = 'sys_config' LIMIT 1;" })
+            });
+            const qData = await qRes.json();
+            if (qData.success && qData.result?.[0]?.results?.[0]?.value) {
+                const cfg = JSON.parse(qData.result[0].results[0].value);
+                if (cfg.cfWorkerName) masterWorkerName = cfg.cfWorkerName;
+            }
+        } catch (e) {}
+    }
+    if (!masterWorkerName) masterWorkerName = "mehr";
+
+    let currentMasterOrigin = "";
+    try {
+        currentMasterOrigin = await getWorkerUrl(accountId, token, masterWorkerName, false);
+    } catch (e) {}
 
     const edgeBindings = [
         { type: "service", name: "MASTER_SERVICE", service: masterWorkerName },
@@ -301,7 +320,27 @@ async function deployEdgeNode(token, accountId, nodeName) {
     await enableWorkerSubdomain(accountId, token, nodeName);
     const finalUrl = await getWorkerUrl(accountId, token, nodeName, false);
 
-    return jsonRes(true, "نود فرعی با موفقیت مستقر شد.", {
+    // 3. Automatische Registrierung des Edge-Nodes in der D1-Datenbank
+    if (d1Id) {
+        try {
+            const registerSql = `
+                INSERT INTO nodes (id, name, url, address, api_key, status, created_at)
+                VALUES ('${nodeName}', '${nodeName}', '${finalUrl}', '${finalUrl}', '${nodeApiKey}', 'active', unixepoch())
+                ON CONFLICT(id) DO UPDATE SET
+                    url = excluded.url,
+                    address = excluded.address,
+                    api_key = excluded.api_key,
+                    status = 'active';
+            `;
+            await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/d1/database/${d1Id}/query`, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                body: JSON.stringify({ sql: registerSql })
+            });
+        } catch (e) {}
+    }
+
+    return jsonRes(true, "نود فرعی با موفقیت مستقر و در دیتابیس ثبت شد.", {
         type: "edge",
         url: finalUrl,
         apiKey: nodeApiKey,

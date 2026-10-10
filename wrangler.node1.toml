@@ -5,11 +5,11 @@ compatibility_flags = ["nodejs_compat"]
 workers_dev = true
 
 [vars]
-PANEL_URL = "https://mehr.v5twycq1o.workers.dev"
-CLUSTER_KEY = "mehr_sec_fc3f368b1166460a9f9d539ac729a77a_lcjowznw"
-API_KEY = "mehr_sec_fc3f368b1166460a9f9d539ac729a77a_lcjowznw"
+PANEL_URL = "https://reza12-panel.754050qv0.workers.dev"
+CLUSTER_KEY = "mehr_cluster_secret_2026"
+API_KEY = "mehr_cluster_secret_2026"
 NODE_ID = "node-edge-12"
 
 [[services]]
 binding = "MASTER_SERVICE"
-service = "mehr"
+service = "reza12-panel"

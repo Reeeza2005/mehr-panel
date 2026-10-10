@@ -3421,7 +3421,7 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
               document.getElementById('add-node-url').focus();
           }
 
-          function commitAddNode() {
+          async function commitAddNode() {
               const url = document.getElementById("add-node-url").value.trim();
               const apiKey = document.getElementById("add-node-apikey").value.trim();
               if (!url || !apiKey) {
@@ -3431,12 +3431,37 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
               }
               if (!window.nahanConfig) window.nahanConfig = {};
               if (!Array.isArray(window.nahanConfig.linkedPanels)) window.nahanConfig.linkedPanels = [];
-              window.nahanConfig.linkedPanels.push({ url, apiKey });
+              
+              // ۱. استخراج شناسه خوانا از آدرس نود
+              const cleanHost = url.replace(/^[a-zA-Z]+:\/\//, "").split("/")[0].split(":")[0];
+              const nodeId = cleanHost.split(".")[0] || ("node_" + Date.now());
+              
+              window.nahanConfig.linkedPanels.push({ id: nodeId, url, apiKey });
               closeAddNodeModal();
               document.getElementById("add-node-url").value = "";
               document.getElementById("add-node-apikey").value = "";
               renderLinkedNodes();
               if (typeof renderTabNodes === "function") renderTabNodes(); 
+              
+              // ۲. ثبت مستقیم و مستقل در دیتابیس D1 پنل
+              try {
+                  const apiBase = (window.nahanConfig?.apiRoute || "sync").replace(/^\/+|\/+$/g, "");
+                  await fetch("/" + apiBase + "/api/nodes", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                          id: nodeId,
+                          name: nodeId,
+                          url: url,
+                          address: url,
+                          api_key: apiKey,
+                          status: "active"
+                      })
+                  });
+              } catch(e) {
+                  console.error("Failed to persist node in D1:", e);
+              }
+
               doSaveDirectly();
           }
 

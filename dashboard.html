@@ -3221,15 +3221,14 @@ proxyip.cmliussss.net" class="w-full px-4 py-3 rounded-xl border border-slate-20
         }
 
                   async function loadDashboard() {
-              
             try {
-                const [statsRes, logsRes] = await Promise.all([
-                    fetch(baseRoute + '/api/stats', { method: 'GET', headers: { 'Authorization': 'Bearer ' + sessionKey } }),
-                    fetch(baseRoute + '/api/logs', { method: 'POST', body: JSON.stringify({ key: sessionKey }) })
-                ]);
+                const statsRes = await fetch("/api/stats");
                 const statsData = await statsRes.json();
-                const logsData = await logsRes.json();
-
+                let logsData = { success: false, logs: [] };
+                try {
+                    const logsRes = await fetch("/api/logs");
+                    logsData = await logsRes.json();
+                } catch(e) {}
                 if (statsData.success && statsData.stats) {
                     const s = statsData.stats || {};
                     const u = s.users || {};

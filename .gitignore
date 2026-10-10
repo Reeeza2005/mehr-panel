@@ -16,3 +16,4 @@ patch_worker.py
 node_modules/
 .wrangler/
 worker-configuration.d.ts
+wrangler.node7.toml

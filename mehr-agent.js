@@ -1,6 +1,6 @@
 import { connect } from "cloudflare:sockets";
 
-const AGENT_VERSION = "1.7.0";
+const AGENT_VERSION = "1.7.1";
 const DEFAULT_PROXY_IP = "bpb.yousefi.isegaro.com";
 
 // وضعیت سراسری نود در حافظه
@@ -324,7 +324,7 @@ async function pipeTcpToWebSocket(tcpSocket, ws, responseHeader, onDownBytes, on
       } else {
         ws.send(chunk);
       }
-    }
+    },
     close() {
       if (typeof onDone === "function") onDone();
       safeCloseWebSocket(ws);

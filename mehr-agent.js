@@ -1,6 +1,6 @@
 import { connect } from "cloudflare:sockets";
 
-const AGENT_VERSION = "1.7.1";
+const AGENT_VERSION = "1.7.2";
 const DEFAULT_PROXY_IP = "bpb.yousefi.isegaro.com";
 
 // وضعیت سراسری نود در حافظه
@@ -312,7 +312,10 @@ async function pipeTcpToWebSocket(tcpSocket, ws, responseHeader, onDownBytes, on
   let headerSent = !responseHeader;
   const writer = new WritableStream({
     async write(chunk) {
-      if (ws.readyState !== 1) return;
+      if (ws.readyState !== 1) {
+        try { tcpSocket.close(); } catch (e) {}
+        return;
+      }
       const bLen = chunk.byteLength || 0;
       if (typeof onDownBytes === "function" && bLen > 0) onDownBytes(bLen);
       if (!headerSent) {
@@ -345,6 +348,8 @@ async function pipeTcpToWebSocket(tcpSocket, ws, responseHeader, onDownBytes, on
 }
 
 async function handleProxyWebSocket(request, env, ctx) {
+  const reqUrl = new URL(request.url);
+  const queryChain = reqUrl.searchParams.get("chain");
   const wsPair = new WebSocketPair();
   const [clientWs, serverWs] = Object.values(wsPair);
   serverWs.accept();
@@ -451,7 +456,8 @@ async function handleProxyWebSocket(request, env, ctx) {
 
       let sock;
       // ۳. مدیریت اتصال به مقصد یا آپ‌استریم (Proxy Chain)
-      const chainTarget = (upstreamConfig.enabled && upstreamConfig.uri) ? parseChainTarget(upstreamConfig.uri) : null;
+      const chainRaw = (queryChain && queryChain.trim()) || ((upstreamConfig.enabled && upstreamConfig.uri) ? upstreamConfig.uri : null);
+      const chainTarget = chainRaw ? parseChainTarget(chainRaw) : null;
       const destHost = chainTarget ? chainTarget.host : parsed.address;
       const destPort = chainTarget ? chainTarget.port : parsed.port;
 
